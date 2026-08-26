@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HEETS ALCOL TIME · Pinzolo & Madonna di Campiglio</title>
+  <meta name="description" content="Il sito ufficiale di Heets Alcol Time: eventi, feste in baita, après-ski e serate a Pinzolo e Madonna di Campiglio." />
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Syne & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            alpine: {
+              950: '#07080a',
+              900: '#0e1117',
+              850: '#131720',
+              800: '#1b202c',
+              700: '#283042',
+            },
+            amber: {
+              400: '#fbbf24',
+              500: '#f59e0b',
+              600: '#d97706',
+            },
+            glow: {
+              orange: '#ff6200',
+            }
+          },
+          fontFamily: {
+            sans: ['Outfit', 'sans-serif'],
+            display: ['Syne', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #07080a;
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(245, 158, 11, 0.08) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(255, 98, 0, 0.06) 0px, transparent 50%),
+        radial-gradient(at 50% 50%, rgba(14, 17, 23, 0.8) 0px, transparent 100%);
+      background-attachment: fixed;
+      color: #ffffff;
+      font-family: 'Outfit', sans-serif;
+    }
+    .glass-panel {
+      background: rgba(19, 23, 32, 0.75);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-card {
+      background: rgba(27, 32, 44, 0.5);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .glass-card:hover {
+      background: rgba(35, 42, 58, 0.75);
+      border-color: rgba(245, 158, 11, 0.4);
+      transform: translateY(-3px);
+      box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.8), 0 0 20px -5px rgba(245, 158, 11, 0.2);
+    }
+    .shadow-glow-amber {
+      box-shadow: 0 0 25px -5px rgba(245, 158, 11, 0.4);
+    }
+    .shadow-glow-orange {
+      box-shadow: 0 0 30px -5px rgba(255, 98, 0, 0.45);
+    }
+  </style>
+</head>
+<body class="selection:bg-amber-500 selection:text-black overflow-x-hidden">
+
+  <!-- HEADER -->
+  <header class="fixed top-0 left-0 right-0 z-40 bg-alpine-950/85 backdrop-blur-md border-b border-white/10 py-3.5 transition-all">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+      
+      <!-- Logo -->
+      <a href="#home" class="flex items-center gap-3 group">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 p-[1.5px] shadow-glow-amber">
+          <div class="w-full h-full bg-alpine-900 rounded-[10px] flex items-center justify-center">
+            <i data-lucide="flame" class="w-5 h-5 text-amber-400 fill-amber-400"></i>
+          </div>
+        </div>
+        <div class="flex flex-col">
+          <span class="font-display font-black text-lg tracking-wider text-white uppercase group-hover:text-amber-400 transition-colors">
+            HEETS <span class="text-amber-500">ALCOL TIME</span>
+          </span>
+          <span class="text-[10px] tracking-widest text-zinc-400 font-mono uppercase -mt-1">
+            PINZOLO · CAMPIGLIO
+          </span>
+        </div>
+      </a>
+
+      <!-- Desktop Nav -->
+      <nav class="hidden lg:flex items-center gap-1 bg-white/5 border border-white/10 rounded-full px-4 py-1.5 backdrop-blur-md">
+        <a href="#home" class="px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:text-amber-400 rounded-full transition-all">Home</a>
+        <a href="#categorie" class="px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:text-amber-400 rounded-full transition-all">Cosa Facciamo</a>
+        <a href="#eventi" class="px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:text-amber-400 rounded-full transition-all">Eventi</a>
+        <a href="#gallery" class="px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:text-amber-400 rounded-full transition-all">Galleria</a>
+        <a href="#chi-siamo" class="px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:text-amber-400 rounded-full transition-all">Chi Siamo</a>
+        <a href="#contatti" class="px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-300 hover:text-amber-400 rounded-full transition-all">Contatti</a>
+      </nav>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <button onclick="openUploadModal()" class="flex items-center gap-2 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-full bg-white/10 hover:bg-white/15 text-zinc-200 border border-white/15 transition-all">
+          <i data-lucide="plus-circle" class="w-4 h-4 text-amber-400"></i>
+          <span class="hidden sm:inline">Carica Momenti</span>
+        </button>
+
+        <button id="adminBtn" onclick="openAdminPanel()" class="hidden items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-full bg-gradient-to-r from-amber-500 to-orange-600 text-black shadow-glow-amber transition-all">
+          <i data-lucide="shield" class="w-4 h-4"></i>
+          <span>Pannello Gestione</span>
+          <span id="pendingBadge" class="bg-red-600 text-white text-[10px] font-mono font-bold w-5 h-5 rounded-full flex items-center justify-center">0</span>
+        </button>
+
+        <button id="authBtn" onclick="openAuthModal()" class="flex items-center gap-2 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-full bg-white/5 hover:bg-white/10 text-zinc-200 border border-white/10 transition-all">
+          <i data-lucide="user" class="w-4 h-4 text-zinc-400"></i>
+          <span id="authBtnText">Accedi</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- 1. HERO SECTION -->
+  <section id="home" class="relative min-h-[92vh] flex items-center justify-center pt-28 pb-16 overflow-hidden">
+    <div class="absolute inset-0 z-0">
+      <img src="https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&w=2000&q=85" alt="Alps Night Life" class="w-full h-full object-cover filter brightness-[0.38] contrast-125" />
+      <div class="absolute inset-0 bg-gradient-to-t from-alpine-950 via-alpine-950/60 to-black/70"></div>
+    </div>
+
+    <div class="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center flex flex-col items-center">
+      
+      <!-- Overline Badge -->
+      <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-amber-400/30 backdrop-blur-md mb-6 shadow-glow-amber">
+        <i data-lucide="flame" class="w-4 h-4 text-amber-400 fill-amber-400"></i>
+        <span id="heroBadge" class="text-xs sm:text-sm font-extrabold tracking-[0.25em] text-amber-300 uppercase font-mono">
+          ALPS · SKI · NIGHTS · APRES-SKI
+        </span>
+      </div>
+
+      <!-- Main Title -->
+      <h1 class="font-display font-black text-4xl sm:text-6xl md:text-7xl lg:text-8xl tracking-tight text-white uppercase mb-4">
+        HEETS <span class="bg-gradient-to-r from-amber-400 via-amber-200 to-amber-500 bg-clip-text text-transparent">ALCOL TIME</span>
+      </h1>
+
+      <!-- Spaced Alpine Claim -->
+      <div class="inline-block relative mb-6">
+        <p id="heroClaim" class="font-mono text-sm sm:text-lg md:text-xl font-bold tracking-[0.3em] sm:tracking-[0.4em] text-zinc-200 uppercase px-4 py-1.5 border-y border-white/15 backdrop-blur-sm">
+          PINZOLO · MADONNA DI CAMPIGLIO · TUTTO L'ANNO
+        </p>
+      </div>
+
+      <!-- Subtitle -->
+      <p id="heroSubtitle" class="max-w-2xl text-sm sm:text-base md:text-lg text-zinc-300 font-normal leading-relaxed mb-10 text-balance">
+        L'energia della montagna, le migliori feste in quota e il gruppo di riferimento per chi vuole vivere davvero Pinzolo e Campiglio.
+      </p>
+
+      <!-- CTAs -->
+      <div class="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+        <a href="#eventi" class="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 text-black font-extrabold text-sm uppercase tracking-wider shadow-glow-orange hover:from-amber-400 hover:to-orange-500 transition-all">
+          <i data-lucide="calendar" class="w-5 h-5 text-black"></i>
+          <span>Prossimi Eventi</span>
+        </a>
+        <a href="#gallery" class="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-white/10 hover:bg-white/15 text-white font-bold text-sm uppercase tracking-wider border border-white/20 hover:border-amber-400/50 backdrop-blur-md transition-all">
+          <i data-lucide="image" class="w-5 h-5 text-amber-400"></i>
+          <span>Guarda i Momenti</span>
+        </a>
+      </div>
+
+      <div class="mt-12 inline-flex items-center gap-2 text-xs font-mono text-zinc-400 tracking-wider">
+        <i data-lucide="map-pin" class="w-3.5 h-3.5 text-amber-500"></i>
+        <span>Pinzolo & Madonna di Campiglio · Val Rendena</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 2. COSA FACCIAMO / CATEGORIE -->
+  <section id="categorie" class="relative py-24 bg-alpine-950/80">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <div class="inline-flex items-center gap-2 text-xs font-mono font-bold tracking-[0.25em] text-amber-400 uppercase mb-2">
+          <span class="w-6 h-[1.5px] bg-amber-400"></span>
+          COSA FACCIAMO
+          <span class="w-6 h-[1.5px] bg-amber-400"></span>
+        </div>
+        <h2 class="font-display font-black text-3xl sm:text-4xl md:text-5xl text-white uppercase tracking-tight">
+          I NOSTRI FORMAT & CATEGORIE
+        </h2>
+        <p class="mt-3 text-sm sm:text-base text-zinc-400">
+          Clicca su ogni categoria per scoprire la storia e la galleria fotografica dedicata.
+        </p>
+      </div>
+
+      <!-- Categories Cards Grid -->
+      <div id="categoriesGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Rendered by JS -->
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 3. CALENDARIO EVENTI -->
+  <section id="eventi" class="relative py-24 bg-alpine-950">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
+        <div>
+          <div class="inline-flex items-center gap-2 text-xs font-mono font-bold tracking-[0.25em] text-amber-400 uppercase mb-2">
+            <span class="w-6 h-[1.5px] bg-amber-400"></span>
+            CALENDARIO EVENTI
+          </div>
+          <h2 class="font-display font-black text-3xl sm:text-4xl md:text-5xl text-white uppercase tracking-tight">
+            PROSSIME FESTE & SERATE
+          </h2>
+        </div>
+
+        <div class="inline-flex p-1 rounded-2xl bg-white/5 border border-white/10">
+          <button id="tabUpcoming" onclick="setEventsFilter('upcoming')" class="px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-amber-500 to-orange-600 text-black shadow-glow-amber">
+            In Programma
+          </button>
+          <button id="tabPast" onclick="setEventsFilter('past')" class="px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-zinc-400 hover:text-white">
+            Storico Passati
+          </button>
+        </div>
+      </div>
+
+      <!-- Events Grid -->
+      <div id="eventsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Rendered by JS -->
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 4. GALLERIA MOMENTI -->
+  <section id="gallery" class="relative py-24 bg-alpine-950/90">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+        <div>
+          <div class="inline-flex items-center gap-2 text-xs font-mono font-bold tracking-[0.25em] text-amber-400 uppercase mb-2">
+            <span class="w-6 h-[1.5px] bg-amber-400"></span>
+            GALLERIA FOTOGRAFICA
+          </div>
+          <h2 class="font-display font-black text-3xl sm:text-4xl md:text-5xl text-white uppercase tracking-tight">
+            I NOSTRI MOMENTI
+          </h2>
+        </div>
+
+        <button onclick="openUploadModal()" class="flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-amber">
+          <i data-lucide="plus-circle" class="w-4 h-4 text-black"></i>
+          <span>Carica i tuoi momenti</span>
+        </button>
+      </div>
+
+      <!-- Gallery Filter Tabs -->
+      <div id="galleryFilters" class="flex items-center gap-2 overflow-x-auto pb-4 mb-8">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Photo Grid -->
+      <div id="photosGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        <!-- Rendered by JS -->
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 5. CHI SIAMO -->
+  <section id="chi-siamo" class="relative py-24 bg-alpine-950">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <div class="inline-flex items-center gap-2 text-xs font-mono font-bold tracking-[0.25em] text-amber-400 uppercase mb-2">
+          <span class="w-6 h-[1.5px] bg-amber-400"></span>
+          CHI SIAMO
+          <span class="w-6 h-[1.5px] bg-amber-400"></span>
+        </div>
+        <h2 id="aboutTitle" class="font-display font-black text-3xl sm:text-4xl md:text-5xl text-white uppercase tracking-tight">
+          NON SOLO AMICI, UNA SECONDA FAMIGLIA
+        </h2>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <div class="lg:col-span-7 space-y-6">
+          <div class="glass-panel p-8 sm:p-10 rounded-3xl border border-white/10 shadow-card">
+            <p id="aboutText" class="text-base sm:text-lg md:text-xl text-zinc-200 leading-relaxed font-normal">
+              "Siamo Heets Alcol Time: un gruppo di ragazzi che passa il tempo insieme in montagna, tra camminate di giorno e serate la notte. Non siamo solo amici, siamo una seconda famiglia. Se vieni a Pinzolo o a Madonna di Campiglio e vuoi divertirti sul serio, sei nel posto giusto: qui trovi le nostre feste, i nostri eventi e i momenti più belli vissuti negli anni."
+            </p>
+            <div class="pt-4 mt-6 border-t border-white/10 flex items-center justify-between text-xs font-mono text-zinc-400">
+              <span class="text-amber-400 font-bold">PINZOLO · MADONNA DI CAMPIGLIO</span>
+              <span>TUTTO L'ANNO</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="lg:col-span-5 grid grid-cols-2 gap-4">
+          <div class="glass-card p-5 rounded-2xl text-center">
+            <div class="font-display font-black text-3xl text-amber-400">6+</div>
+            <div class="text-[11px] font-mono text-zinc-400 uppercase mt-1">Anni di Feste</div>
+          </div>
+          <div class="glass-card p-5 rounded-2xl text-center">
+            <div class="font-display font-black text-3xl text-amber-400">80+</div>
+            <div class="text-[11px] font-mono text-zinc-400 uppercase mt-1">Eventi</div>
+          </div>
+          <div class="glass-card p-5 rounded-2xl text-center">
+            <div class="font-display font-black text-3xl text-amber-400">1000+</div>
+            <div class="text-[11px] font-mono text-zinc-400 uppercase mt-1">Momenti</div>
+          </div>
+          <div class="glass-card p-5 rounded-2xl text-center">
+            <div class="font-display font-black text-3xl text-amber-400">5000+</div>
+            <div class="text-[11px] font-mono text-zinc-400 uppercase mt-1">Amici & Community</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 6. CONTATTI & SOCIAL -->
+  <section id="contatti" class="relative py-24 bg-alpine-950 overflow-hidden">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <div class="inline-flex items-center gap-2 text-xs font-mono font-bold tracking-[0.25em] text-amber-400 uppercase mb-2">
+          <span class="w-6 h-[1.5px] bg-amber-400"></span>
+          SEMPRE REPERIBILI
+          <span class="w-6 h-[1.5px] bg-amber-400"></span>
+        </div>
+        <h2 class="font-display font-black text-3xl sm:text-4xl md:text-5xl text-white uppercase tracking-tight">
+          CONTATTI & SOCIAL
+        </h2>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        
+        <!-- Left: Channels -->
+        <div class="lg:col-span-5 space-y-4">
+          <a href="https://instagram.com/heets.alcoltime" target="_blank" class="glass-card p-5 rounded-3xl border border-white/10 flex items-center justify-between group block">
+            <div class="flex items-center gap-4">
+              <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-yellow-500 via-pink-500 to-purple-600 flex items-center justify-center text-white">
+                <i data-lucide="instagram" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <p class="text-[11px] font-mono uppercase text-zinc-400">Instagram Ufficiale</p>
+                <p class="text-base font-bold text-white group-hover:text-amber-400 transition-colors">@heets.alcoltime</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono font-bold text-amber-400">Seguici →</span>
+          </a>
+
+          <a href="https://tiktok.com/@heets.alcoltime" target="_blank" class="glass-card p-5 rounded-3xl border border-white/10 flex items-center justify-between group block">
+            <div class="flex items-center gap-4">
+              <div class="w-12 h-12 rounded-2xl bg-black border border-white/20 flex items-center justify-center text-white font-display font-bold text-lg">
+                TT
+              </div>
+              <div>
+                <p class="text-[11px] font-mono uppercase text-zinc-400">TikTok Ufficiale</p>
+                <p class="text-base font-bold text-white group-hover:text-amber-400 transition-colors">@heets.alcoltime</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono font-bold text-amber-400">Guarda i video →</span>
+          </a>
+
+          <a href="https://wa.me/393450000000" target="_blank" class="glass-card p-5 rounded-3xl border border-white/10 flex items-center justify-between group block bg-emerald-950/20">
+            <div class="flex items-center gap-4">
+              <div class="w-12 h-12 rounded-2xl bg-[#25D366] flex items-center justify-center text-black">
+                <i data-lucide="message-circle" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <p class="text-[11px] font-mono uppercase text-emerald-400">WhatsApp Chat</p>
+                <p class="text-base font-bold text-white">Scrivici in Diretta</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono font-bold text-emerald-400">Apri Chat →</span>
+          </a>
+        </div>
+
+        <!-- Right: Contact Form -->
+        <div class="lg:col-span-7">
+          <div class="glass-panel p-7 sm:p-9 rounded-3xl border border-white/10">
+            <h3 class="font-display font-black text-xl text-white uppercase tracking-tight mb-4">INVIACI UN MESSAGGIO</h3>
+            <form onsubmit="handleSendMessage(event)" class="space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-[11px] font-mono text-zinc-400 mb-1">Nome e Cognome *</label>
+                  <input type="text" id="contactName" required placeholder="Mario Rossi" class="w-full px-4 py-2.5 rounded-xl bg-alpine-950 border border-white/10 focus:border-amber-400 text-white text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label class="block text-[11px] font-mono text-zinc-400 mb-1">Email / Instagram</label>
+                  <input type="text" id="contactEmail" placeholder="@instagram o email" class="w-full px-4 py-2.5 rounded-xl bg-alpine-950 border border-white/10 focus:border-amber-400 text-white text-sm focus:outline-none" />
+                </div>
+              </div>
+              <div>
+                <label class="block text-[11px] font-mono text-zinc-400 mb-1">Il tuo messaggio *</label>
+                <textarea id="contactMsg" required rows="4" placeholder="Cosa vorresti organizzare o sapere?" class="w-full px-4 py-3 rounded-xl bg-alpine-950 border border-white/10 focus:border-amber-400 text-white text-sm focus:outline-none resize-none"></textarea>
+              </div>
+              <button type="submit" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-amber">
+                Invia Messaggio
+              </button>
+            </form>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="bg-alpine-950 border-t border-white/10 pt-12 pb-8">
+    <div class="max-w-7xl mx-auto px-4 text-center space-y-4">
+      <p class="font-display font-bold text-lg uppercase text-white">HEETS <span class="text-amber-500">ALCOL TIME</span></p>
+      <p class="text-xs font-mono text-zinc-500">© 2026 HEETS ALCOL TIME · Pinzolo & Madonna di Campiglio · Dolomiti di Brenta</p>
+    </div>
+  </footer>
+
+  <!-- MODALS -->
+
+  <!-- 1. Category Modal -->
+  <div id="categoryModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl">
+    <div class="relative w-full max-w-3xl bg-alpine-900 border border-white/15 rounded-3xl overflow-hidden max-h-[90vh] flex flex-col">
+      <button onclick="closeCategoryModal()" class="absolute top-4 right-4 z-20 p-2.5 rounded-full bg-black/60 text-white">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+      <div id="categoryModalContent" class="overflow-y-auto p-6 space-y-6"></div>
+    </div>
+  </div>
+
+  <!-- 2. Upload Modal -->
+  <div id="uploadModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl">
+    <div class="relative w-full max-w-lg bg-alpine-900 border border-white/15 rounded-3xl p-6 sm:p-8 space-y-5">
+      <div class="flex items-center justify-between border-b border-white/10 pb-4">
+        <h3 class="font-display font-black text-xl text-white uppercase">Carica i tuoi momenti</h3>
+        <button onclick="closeUploadModal()" class="text-zinc-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <p class="text-xs text-amber-300 bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
+        🛡️ <strong>Moderazione:</strong> le foto caricate saranno visibili pubblicamente dopo l'approvazione del team Heets.
+      </p>
+      <form onsubmit="handleUploadSubmit(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-mono text-zinc-400 mb-1">URL Immagine o Foto *</label>
+          <input type="url" id="uploadUrl" required placeholder="https://images.unsplash.com/..." class="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-white/10 text-white text-sm font-mono focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-mono text-zinc-400 mb-1">Categoria *</label>
+          <select id="uploadCategory" class="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-white/10 text-white text-sm focus:outline-none">
+            <option value="feste">Feste & Collette</option>
+            <option value="apres-ski">Après-Ski</option>
+            <option value="capodanno">Capodanno</option>
+            <option value="ferragosto">Ferragosto</option>
+            <option value="montagna">Montagna</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-mono text-zinc-400 mb-1">Il tuo Nome / Nickname *</label>
+          <input type="text" id="uploadAuthor" required placeholder="es. Giacomo" class="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-white/10 text-white text-sm focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-xs font-mono text-zinc-400 mb-1">Didascalia</label>
+          <input type="text" id="uploadTitle" placeholder="es. Notte in baita a Pinzolo" class="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-white/10 text-white text-sm focus:outline-none" />
+        </div>
+        <button type="submit" class="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-black font-bold uppercase tracking-wider text-xs">
+          Invia Foto per Approvazione
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. Auth Modal -->
+  <div id="authModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xl">
+    <div class="relative w-full max-w-md bg-alpine-900 border border-white/15 rounded-3xl p-6 sm:p-8 space-y-6">
+      <div class="flex items-center justify-between border-b border-white/10 pb-4">
+        <h3 class="font-display font-black text-xl text-white uppercase">Accedi a Heets</h3>
+        <button onclick="closeAuthModal()" class="text-zinc-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <div class="space-y-2 p-3 rounded-2xl bg-white/5 border border-white/10 text-center">
+        <p class="text-xs font-mono text-amber-400 font-bold">⚡ Accesso Rapido Demo</p>
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button onclick="loginAs('admin')" class="py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-black font-bold text-xs">
+            Admin Heets (Gestore)
+          </button>
+          <button onclick="loginAs('user')" class="py-2 px-3 rounded-xl bg-white/10 text-white font-bold text-xs border border-white/15">
+            Turista (Utente)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Admin Dashboard Modal -->
+  <div id="adminModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl overflow-y-auto">
+    <div class="relative w-full max-w-5xl bg-alpine-900 border border-white/15 rounded-3xl p-6 sm:p-8 max-h-[92vh] overflow-y-auto space-y-6 my-auto">
+      <div class="flex items-center justify-between border-b border-white/10 pb-4">
+        <div class="flex items-center gap-3">
+          <i data-lucide="shield" class="w-6 h-6 text-amber-400"></i>
+          <h2 class="font-display font-black text-xl text-white uppercase">PANNELLO GESTIONE HEETS (ADMIN)</h2>
+        </div>
+        <button onclick="closeAdminPanel()" class="p-2 rounded-xl bg-white/5 text-zinc-300 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Pending Moderation Section -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="font-mono text-xs font-bold text-amber-400 uppercase tracking-widest">
+            1. Foto in Attesa di Moderazione
+          </h3>
+          <span id="pendingCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-red-600 text-white font-bold">0</span>
+        </div>
+        <div id="adminPendingGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- CMS Text Editor -->
+      <div class="space-y-4 pt-6 border-t border-white/10">
+        <h3 class="font-mono text-xs font-bold text-amber-400 uppercase tracking-widest">
+          2. Modifica Testi del Sito (Live CMS)
+        </h3>
+        <form onsubmit="handleSaveCMS(event)" class="space-y-3 glass-panel p-5 rounded-2xl">
+          <div>
+            <label class="block text-[11px] font-mono text-zinc-400 mb-1">Claim Hero</label>
+            <input type="text" id="cmsClaim" class="w-full px-3 py-2 rounded-xl bg-alpine-950 border border-white/10 text-white text-xs" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-mono text-zinc-400 mb-1">Sottotitolo Hero</label>
+            <input type="text" id="cmsSubtitle" class="w-full px-3 py-2 rounded-xl bg-alpine-950 border border-white/10 text-white text-xs" />
+          </div>
+          <div>
+            <label class="block text-[11px] font-mono text-zinc-400 mb-1">Testo Chi Siamo</label>
+            <textarea id="cmsAbout" rows="3" class="w-full px-3 py-2 rounded-xl bg-alpine-950 border border-white/10 text-white text-xs resize-none"></textarea>
+          </div>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-black text-xs font-bold uppercase">
+            Salva Testi
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // State management & LocalStorage persistence
+    const INITIAL_CATEGORIES = [
+      { id: 'feste', title: 'Feste & Collette', badge: 'NIGHTLIFE', desc: 'Raduni e serate organizzate insieme, tra musica e amici, per far conoscere le persone che vengono in vacanza.', img: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80' },
+      { id: 'apres-ski', title: 'Après-Ski', badge: 'WINTER VIBES', desc: 'I momenti migliori appena scesi dalle piste, tra baite, musica e brindisi.', img: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80' },
+      { id: 'capodanno', title: 'Capodanno', badge: 'SPECIAL NIGHT', desc: 'La notte più speciale dell'anno, in quota, tra luci e festa fino all'alba.', img: 'https://images.unsplash.com/photo-1467810563316-b5476525c0f9?auto=format&fit=crop&w=800&q=80' },
+      { id: 'ferragosto', title: 'Ferragosto', badge: 'SUMMER PEAK', desc: 'Il cuore dell'estate in montagna, giornate di sole e serate senza fine.', img: 'https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&w=800&q=80' },
+      { id: 'montagna', title: 'Montagna', badge: 'NATURE & HIKE', desc: 'Camminate, escursioni e giornate immerse nella natura, prima ancora che nella festa.', img: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80' }
+    ];
+
+    const INITIAL_EVENTS = [
+      { id: '1', title: 'ALPEN GLOW · APRES-SKI SUNSET PARTY', date: '2026-03-07', loc: 'Baita del Sole · Spinale, Madonna di Campiglio', desc: 'DJ Set in terrazza panoramica, bombardini caldi e aperitivo a ritmo serrato.', img: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80', isUpcoming: true },
+      { id: '2', title: 'HEETS PRIVATE BAVARIAN & NIGHT PARTY', date: '2026-03-14', loc: 'Chalet Segreto · Pinzolo Val Rendena', desc: 'La festa colletta più attesa della stagione con open bar, laser show e resident DJs.', img: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80', isUpcoming: true },
+      { id: '3', title: 'CAPODANNO IN QUOTA 2026 · GROSTÈ', date: '2025-12-31', loc: 'Chalet Grostè · 2500m Quota', desc: 'Cenone, fuochi e party infinito tra le nuvole.', img: 'https://images.unsplash.com/photo-1467810563316-b5476525c0f9?auto=format&fit=crop&w=800&q=80', isUpcoming: false }
+    ];
+
+    const INITIAL_PHOTOS = [
+      { id: 'p1', url: 'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800&q=80', title: 'Tramonto Spinale con DJ Set', cat: 'apres-ski', author: 'Marco R.', status: 'approved', likes: 42 },
+      { id: 'p2', url: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80', title: 'Festa in baita notte fonda', cat: 'feste', author: 'Heets Crew', status: 'approved', likes: 68 },
+      { id: 'p3', url: 'https://images.unsplash.com/photo-1467810563316-b5476525c0f9?auto=format&fit=crop&w=800&q=80', title: 'Brindisi Capodanno Grostè', cat: 'capodanno', author: 'Giulia & Sara', status: 'approved', likes: 120 },
+      { id: 'p4', url: 'https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&w=800&q=80', title: 'Falò e chitarre a Ferragosto', cat: 'ferragosto', author: 'Matteo B.', status: 'approved', likes: 85 },
+      { id: 'p5', url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80', title: 'In cima al Brenta all'alba', cat: 'montagna', author: 'Simone T.', status: 'approved', likes: 94 },
+      // Pending
+      { id: 'p-pen-1', url: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=800&q=80', title: 'DJ Set a Campiglio sabato', cat: 'feste', author: 'Alessandro Turista', status: 'pending', likes: 0 }
+    ];
+
+    let photos = JSON.parse(localStorage.getItem('hat_photos')) || INITIAL_PHOTOS;
+    let currentUser = JSON.parse(localStorage.getItem('hat_user')) || null;
+    let currentGalleryFilter = 'all';
+    let currentEventsFilter = 'upcoming';
+
+    function savePhotos() {
+      localStorage.setItem('hat_photos', JSON.stringify(photos));
+      renderAll();
+    }
+
+    function renderCategories() {
+      const grid = document.getElementById('categoriesGrid');
+      grid.innerHTML = INITIAL_CATEGORIES.map((cat, idx) => `
+        <div onclick="openCategoryModal('${cat.id}')" class="group relative rounded-3xl overflow-hidden cursor-pointer bg-alpine-900 border border-white/10 hover:border-amber-400/50 transition-all duration-300 shadow-card min-h-[300px] flex flex-col justify-between p-6 ${idx === 0 ? 'sm:col-span-2' : ''}">
+          <img src="${cat.img}" class="absolute inset-0 w-full h-full object-cover filter brightness-[0.38] group-hover:scale-105 transition-transform duration-700 -z-0" />
+          <div class="relative z-10 flex items-center justify-between">
+            <span class="px-3 py-1 rounded-full bg-black/50 border border-white/15 text-[11px] font-mono font-bold text-amber-300 uppercase">${cat.badge}</span>
+            <span class="text-xs font-mono text-zinc-300">Dettagli & Gallery →</span>
+          </div>
+          <div class="relative z-10 space-y-1">
+            <h3 class="font-display font-black text-2xl text-white uppercase">${cat.title}</h3>
+            <p class="text-xs text-zinc-300 line-clamp-2">${cat.desc}</p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderEvents() {
+      const grid = document.getElementById('eventsGrid');
+      const filtered = INITIAL_EVENTS.filter(e => currentEventsFilter === 'upcoming' ? e.isUpcoming : !e.isUpcoming);
+      grid.innerHTML = filtered.map(e => `
+        <div class="glass-card rounded-3xl overflow-hidden border border-white/10 flex flex-col justify-between">
+          <div class="relative h-48">
+            <img src="${e.img}" class="w-full h-full object-cover filter brightness-75" />
+            <div class="absolute top-4 left-4 px-3 py-1.5 rounded-xl bg-black/80 font-mono text-xs font-bold text-amber-400">${e.date}</div>
+          </div>
+          <div class="p-6 space-y-3">
+            <h3 class="font-display font-black text-lg text-white uppercase">${e.title}</h3>
+            <p class="text-xs text-zinc-400 font-mono">${e.loc}</p>
+            <p class="text-xs text-zinc-300">${e.desc}</p>
+            <a href="https://wa.me/393450000000?text=${encodeURIComponent('Info evento ' + e.title)}" target="_blank" class="mt-3 block text-center py-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold uppercase hover:bg-amber-500/30 transition-colors">
+              Info & Liste su WhatsApp
+            </a>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderGallery() {
+      const filters = document.getElementById('galleryFilters');
+      const tabs = [{ id: 'all', label: 'Tutti' }, ...INITIAL_CATEGORIES.map(c => ({ id: c.id, label: c.title }))];
+      filters.innerHTML = tabs.map(t => `
+        <button onclick="setGalleryFilter('${t.id}')" class="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${currentGalleryFilter === t.id ? 'bg-amber-400 text-black shadow-glow-amber' : 'bg-white/5 text-zinc-300 hover:text-white border border-white/10'}">
+          ${t.label}
+        </button>
+      `).join('');
+
+      const grid = document.getElementById('photosGrid');
+      const approved = photos.filter(p => p.status === 'approved' && (currentGalleryFilter === 'all' || p.cat === currentGalleryFilter));
+      grid.innerHTML = approved.map(p => `
+        <div class="group relative aspect-square rounded-2xl overflow-hidden bg-alpine-900 border border-white/10 shadow-card">
+          <img src="${p.url}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+          <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity p-3 flex flex-col justify-end">
+            <p class="text-xs font-bold text-white truncate">${p.title}</p>
+            <p class="text-[10px] text-zinc-300 font-mono">@${p.author}</p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderAdminPending() {
+      const grid = document.getElementById('adminPendingGrid');
+      const pending = photos.filter(p => p.status === 'pending');
+      document.getElementById('pendingBadge').innerText = pending.length;
+      document.getElementById('pendingCountBadge').innerText = pending.length;
+
+      if (pending.length === 0) {
+        grid.innerHTML = '<p class="text-xs text-zinc-500 col-span-3 py-6 text-center">Nessuna foto in attesa di moderazione.</p>';
+        return;
+      }
+
+      grid.innerHTML = pending.map(p => `
+        <div class="glass-card rounded-2xl overflow-hidden border border-white/10 p-3 space-y-2">
+          <img src="${p.url}" class="w-full h-32 object-cover rounded-xl" />
+          <p class="text-xs font-bold text-white truncate">${p.title}</p>
+          <div class="flex items-center justify-between text-[10px] font-mono text-zinc-400">
+            <span>${p.cat.toUpperCase()}</span>
+            <span>@${p.author}</span>
+          </div>
+          <div class="flex gap-2 pt-1">
+            <button onclick="approvePhoto('${p.id}')" class="flex-1 py-1.5 rounded-lg bg-emerald-600 text-white font-bold text-xs">Approva</button>
+            <button onclick="rejectPhoto('${p.id}')" class="flex-1 py-1.5 rounded-lg bg-red-600/30 text-red-300 font-bold text-xs">Rifiuta</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function approvePhoto(id) {
+      const found = photos.find(p => p.id === id);
+      if (found) {
+        found.status = 'approved';
+        savePhotos();
+        alert('Foto approvata e visibile nella gallery!');
+      }
+    }
+
+    function rejectPhoto(id) {
+      photos = photos.filter(p => p.id !== id);
+      savePhotos();
+    }
+
+    function setGalleryFilter(filter) {
+      currentGalleryFilter = filter;
+      renderGallery();
+    }
+
+    function setEventsFilter(filter) {
+      currentEventsFilter = filter;
+      document.getElementById('tabUpcoming').className = filter === 'upcoming' ? 'px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-amber-500 to-orange-600 text-black shadow-glow-amber' : 'px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-zinc-400 hover:text-white';
+      document.getElementById('tabPast').className = filter === 'past' ? 'px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-amber-500 to-orange-600 text-black shadow-glow-amber' : 'px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider text-zinc-400 hover:text-white';
+      renderEvents();
+    }
+
+    function openCategoryModal(catId) {
+      const cat = INITIAL_CATEGORIES.find(c => c.id === catId);
+      const catPhotos = photos.filter(p => p.status === 'approved' && p.cat === catId);
+      const content = document.getElementById('categoryModalContent');
+      content.innerHTML = `
+        <div class="relative h-48 rounded-2xl overflow-hidden mb-4">
+          <img src="${cat.img}" class="w-full h-full object-cover filter brightness-75" />
+          <div class="absolute bottom-4 left-4">
+            <span class="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold uppercase">${cat.badge}</span>
+            <h2 class="font-display font-black text-2xl text-white uppercase">${cat.title}</h2>
+          </div>
+        </div>
+        <p class="text-sm text-zinc-200 leading-relaxed">${cat.desc}</p>
+        <div class="pt-4 border-t border-white/10">
+          <h4 class="font-mono text-xs text-amber-400 uppercase font-bold mb-3">Foto Raccolte in questa Categoria (${catPhotos.length})</h4>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            ${catPhotos.map(p => `<img src="${p.url}" class="aspect-square object-cover rounded-xl" />`).join('')}
+          </div>
+        </div>
+      `;
+      document.getElementById('categoryModal').classList.remove('hidden');
+    }
+    function closeCategoryModal() { document.getElementById('categoryModal').classList.add('hidden'); }
+
+    function openUploadModal() { document.getElementById('uploadModal').classList.remove('hidden'); }
+    function closeUploadModal() { document.getElementById('uploadModal').classList.add('hidden'); }
+
+    function handleUploadSubmit(e) {
+      e.preventDefault();
+      const url = document.getElementById('uploadUrl').value;
+      const cat = document.getElementById('uploadCategory').value;
+      const author = document.getElementById('uploadAuthor').value;
+      const title = document.getElementById('uploadTitle').value || 'Momento Heets';
+
+      photos.unshift({
+        id: 'p-' + Date.now(),
+        url,
+        cat,
+        author,
+        title,
+        status: 'pending',
+        likes: 0
+      });
+      savePhotos();
+      closeUploadModal();
+      confetti({ particleCount: 60, spread: 50 });
+      alert('Foto inviata con successo! Sarà visibile appena approvata dai gestori.');
+    }
+
+    function openAuthModal() { document.getElementById('authModal').classList.remove('hidden'); }
+    function closeAuthModal() { document.getElementById('authModal').classList.add('hidden'); }
+
+    function loginAs(role) {
+      currentUser = { role, name: role === 'admin' ? 'Admin Heets' : 'Turista' };
+      localStorage.setItem('hat_user', JSON.stringify(currentUser));
+      updateAuthUI();
+      closeAuthModal();
+      alert(`Accesso effettuato come ${currentUser.name}!`);
+    }
+
+    function updateAuthUI() {
+      const adminBtn = document.getElementById('adminBtn');
+      const authBtnText = document.getElementById('authBtnText');
+      if (currentUser && currentUser.role === 'admin') {
+        adminBtn.classList.remove('hidden');
+        adminBtn.classList.add('flex');
+        authBtnText.innerText = 'Admin';
+      } else if (currentUser) {
+        adminBtn.classList.add('hidden');
+        adminBtn.classList.remove('flex');
+        authBtnText.innerText = currentUser.name;
+      } else {
+        adminBtn.classList.add('hidden');
+        adminBtn.classList.remove('flex');
+        authBtnText.innerText = 'Accedi';
+      }
+    }
+
+    function openAdminPanel() {
+      renderAdminPending();
+      document.getElementById('adminModal').classList.remove('hidden');
+    }
+    function closeAdminPanel() { document.getElementById('adminModal').classList.add('hidden'); }
+
+    function handleSendMessage(e) {
+      e.preventDefault();
+      alert('Messaggio inviato con successo! Ti risponderemo su Instagram / WhatsApp a breve.');
+      e.target.reset();
+    }
+
+    function handleSaveCMS(e) {
+      e.preventDefault();
+      const claim = document.getElementById('cmsClaim').value;
+      const sub = document.getElementById('cmsSubtitle').value;
+      const about = document.getElementById('cmsAbout').value;
+      if (claim) document.getElementById('heroClaim').innerText = claim;
+      if (sub) document.getElementById('heroSubtitle').innerText = sub;
+      if (about) document.getElementById('aboutText').innerText = `"${about}"`;
+      alert('Testi del sito aggiornati con successo!');
+      closeAdminPanel();
+    }
+
+    function renderAll() {
+      renderCategories();
+      renderEvents();
+      renderGallery();
+      renderAdminPending();
+      updateAuthUI();
+      lucide.createIcons();
+    }
+
+    // Init
+    window.addEventListener('DOMContentLoaded', renderAll);
+  </script>
+</body>
+</html>

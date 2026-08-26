@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#071b38" />
+      <stop offset="100%" stop-color="#020617" />
+    </radialGradient>
+    <filter id="neonGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="120" height="120" rx="28" fill="url(#bgGrad)" stroke="#00f0ff" stroke-width="1.5" stroke-opacity="0.3" />
+
+  <!-- Logo Graphics: Neon Iceberg in Cocktail Glass -->
+  <g filter="url(#neonGlow)" stroke="#00f0ff" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Mountain / Iceberg peaks inside glass -->
+    <path d="M60 28 L68 46 L77 56 L60 56 L43 56 L52 44 Z" fill="none" stroke-width="2.2" />
+    <path d="M60 28 L59 40 L65 49 L60 56" fill="none" stroke-width="1.6" />
+    <path d="M52 44 L56 36 L60 40" fill="none" stroke-width="1.5" />
+    <path d="M68 46 L65 38" fill="none" stroke-width="1.5" />
+    <!-- Submerged iceberg ridges -->
+    <path d="M43 56 L50 68 L60 74 L70 68 L77 56" fill="none" stroke-width="2" />
+    <path d="M60 56 L58 64 L62 70 L60 74" fill="none" stroke-width="1.5" />
+    <path d="M50 68 L55 62" fill="none" stroke-width="1.2" />
+    <path d="M70 68 L65 62" fill="none" stroke-width="1.2" />
+
+    <!-- Cocktail Glass Rim -->
+    <ellipse cx="60" cy="56" rx="35" ry="7" fill="none" stroke-width="2.5" />
+
+    <!-- Cocktail Glass Bowl -->
+    <path d="M25 56 C26 76, 52 82, 57 93 L57 101" fill="none" stroke-width="2.5" />
+    <path d="M95 56 C94 76, 68 82, 63 93 L63 101" fill="none" stroke-width="2.5" />
+
+    <!-- Glass Stem & Base -->
+    <ellipse cx="60" cy="101" rx="20" ry="3.5" fill="none" stroke-width="2.5" />
+  </g>
+</svg>
