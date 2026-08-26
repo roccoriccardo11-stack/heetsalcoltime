@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, User, LogOut, Menu, X, PlusCircle } from 'lucide-react';
+import { Shield, User, LogOut, Menu, X, PlusCircle, Crown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
 import { BrandLogo } from './Logo';
 
 export const Header = ({ onOpenAuth, onOpenUpload, onOpenAdmin, currentView, setCurrentView }) => {
-  const { user, isOwner, isModerator, canManage, logout } = useAuth();
+  const { user, hasOwner, isOwner, isModerator, canManage, logout } = useAuth();
   const { pendingPhotos, messages } = useData();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -173,6 +173,15 @@ export const Header = ({ onOpenAuth, onOpenUpload, onOpenAdmin, currentView, set
                   </div>
                 )}
               </div>
+            ) : !hasOwner ? (
+              <button
+                onClick={onOpenAuth}
+                className="flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wider rounded-full bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black border border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.4)] transition-all animate-pulse"
+                title="Configura il primo account Owner"
+              >
+                <Crown className="w-4 h-4 text-black" />
+                <span>Setup Primo Owner</span>
+              </button>
             ) : (
               <button
                 onClick={onOpenAuth}
@@ -272,6 +281,17 @@ export const Header = ({ onOpenAuth, onOpenUpload, onOpenAdmin, currentView, set
                     <LogOut className="w-4 h-4" />
                   </button>
                 </div>
+              ) : !hasOwner ? (
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    onOpenAuth();
+                  }}
+                  className="w-full py-3 text-xs font-black uppercase tracking-wider rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 text-black border border-amber-400 shadow-lg text-center flex items-center justify-center gap-2"
+                >
+                  <Crown className="w-4 h-4 text-black" />
+                  <span>Configura Primo Owner</span>
+                </button>
               ) : (
                 <button
                   onClick={() => {

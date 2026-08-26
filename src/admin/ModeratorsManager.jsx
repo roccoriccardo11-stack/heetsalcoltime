@@ -41,8 +41,8 @@ export const ModeratorsManager = ({ onShowToast }) => {
   const [copiedLink, setCopiedLink] = useState(false);
   
   // Superadmin profile settings states
-  const [adminName, setAdminName] = useState(user?.name || 'SuperAdmin Heets');
-  const [adminEmail, setAdminEmail] = useState(user?.email || 'admin@heets.it');
+  const [adminName, setAdminName] = useState(user?.name || 'Owner Heets');
+  const [adminEmail, setAdminEmail] = useState(user?.email || '');
   const [adminPassword, setAdminPassword] = useState('');
   const [savedSettingsSuccess, setSavedSettingsSuccess] = useState(false);
 
@@ -65,9 +65,9 @@ export const ModeratorsManager = ({ onShowToast }) => {
     }
   };
 
-  const handleSaveAdminProfile = (e) => {
+  const handleSaveAdminProfile = async (e) => {
     e.preventDefault();
-    const res = updateSuperAdminProfile({
+    const res = await updateSuperAdminProfile({
       name: adminName,
       email: adminEmail,
       password: adminPassword || undefined
@@ -75,9 +75,10 @@ export const ModeratorsManager = ({ onShowToast }) => {
 
     if (res.success) {
       setSavedSettingsSuccess(true);
+      setAdminPassword('');
       setTimeout(() => setSavedSettingsSuccess(false), 4000);
       if (onShowToast) {
-        onShowToast('Credenziali SuperAdmin aggiornate con successo!', 'success');
+        onShowToast('Credenziali Owner aggiornate con successo!', 'success');
       }
     } else {
       if (onShowToast) {

@@ -300,19 +300,10 @@ export const INITIAL_MESSAGES = [
   }
 ];
 
-// Initial Core Users: ONLY the SUPERADMIN / OWNER exists initially.
-// Nobody else is a moderator until the Superadmin emits private invite codes.
-export const INITIAL_USERS = [
-  {
-    email: "admin@heets.it",
-    password: "admin",
-    name: "SuperAdmin Heets",
-    role: "owner",
-    avatar: "👑",
-    isActive: true,
-    createdAt: "2026-01-01T00:00:00Z"
-  }
-];
+// Initial Core Users: Starts EMPTY (0 Owners) so that the project owner can perform the INITIAL OWNER SETUP.
+// No one can become a moderator without an invite issued by the registered OWNER.
+export const INITIAL_USERS = [];
 
 // Backward-compatibility alias
 export const DEMO_USERS = INITIAL_USERS;
+

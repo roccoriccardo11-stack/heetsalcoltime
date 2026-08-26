@@ -1,24 +1,77 @@
 import React, { useState, useEffect } from 'react';
-import { X, Lock, Mail, User, Shield, ArrowRight, KeyRound, CheckCircle2, AlertCircle } from 'lucide-react';
+import {
+  X,
+  Lock,
+  Mail,
+  User,
+  Shield,
+  ArrowRight,
+  KeyRound,
+  CheckCircle2,
+  AlertCircle,
+  Crown,
+  HelpCircle,
+  RefreshCw,
+  Sparkles
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { IcebergLogoIcon } from './Logo';
 
 export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = null }) => {
-  const { login, register, verifyInviteToken, registerWithInvite } = useAuth();
-  const [activeTab, setActiveTab] = useState('login'); // 'login' | 'register' | 'invite'
-  
-  // Login / Register Form State
+  const {
+    hasOwner,
+    ownerCount,
+    setupInitialOwner,
+    login,
+    register,
+    verifyInviteToken,
+    registerWithInvite,
+    requestPasswordReset,
+    completePasswordReset,
+    emergencyRecoverOwner
+  } = useAuth();
+
+  // Active view: 'setup' | 'login' | 'register' | 'invite' | 'forgot' | 'emergency'
+  const [activeTab, setActiveTab] = useState(() => (!hasOwner ? 'setup' : 'login'));
+
+  // Form states
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // Invite Form State
+  // Invite states
   const [inviteToken, setInviteToken] = useState(initialInviteToken || '');
   const [verifiedInvite, setVerifiedInvite] = useState(null);
   const [modName, setModName] = useState('');
   const [modEmail, setModEmail] = useState('');
   const [modPassword, setModPassword] = useState('');
+
+  // Password reset states
+  const [resetStep, setResetStep] = useState(1); // 1 = request token, 2 = set new password
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
+
+  // Emergency recovery states
+  const [emergencyKey, setEmergencyKey] = useState('');
+  const [emergencyEmail, setEmergencyEmail] = useState('');
+  const [emergencyName, setEmergencyName] = useState('Owner Heets');
+  const [emergencyPassword, setEmergencyPassword] = useState('');
+  const [emergencyConfirmPass, setEmergencyConfirmPass] = useState('');
+
+  // Synchronize active tab if owner state changes or invite token is passed
+  useEffect(() => {
+    if (!hasOwner) {
+      setActiveTab('setup');
+    } else if (activeTab === 'setup') {
+      setActiveTab('login');
+    }
+  }, [hasOwner]);
 
   useEffect(() => {
     if (initialInviteToken) {
@@ -38,6 +91,7 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
 
   if (!isOpen) return null;
 
+  // Verify Moderator Invite Token
   const handleVerifyToken = () => {
     setError('');
     const res = verifyInviteToken(inviteToken.trim());
@@ -46,19 +100,22 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
       if (res.invite.email && res.invite.email !== 'Qualsiasi email autorizzata') {
         setModEmail(res.invite.email);
       }
-      if (onShowToast) onShowToast('Codice invito valido! Completa la registrazione moderatore.', 'success');
+      if (onShowToast) onShowToast('Codice invito valido! Inserisci i tuoi dati per completare la registrazione.', 'success');
     } else {
       setVerifiedInvite(null);
       setError(res.error || 'Codice invito non valido o scaduto.');
     }
   };
 
-  const handleInviteSubmit = (e) => {
+  // Submit Moderator Registration with Invite
+  const handleInviteSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
     if (!modName || !modPassword) {
       setError('Inserisci il tuo nome e una password.');
+      setLoading(false);
       return;
     }
 
@@ -68,19 +125,21 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
 
     if (!emailToUse) {
       setError('Inserisci il tuo indirizzo email.');
+      setLoading(false);
       return;
     }
 
-    const res = registerWithInvite({
+    const res = await registerWithInvite({
       token: inviteToken.trim(),
       name: modName,
       email: emailToUse,
       password: modPassword
     });
 
+    setLoading(false);
     if (res.success) {
       if (onShowToast) {
-        onShowToast(`Benvenuto nel team moderatori, ${res.user.name}!`, 'success');
+        onShowToast(`Benvenuto nel team moderatori, ${res.user.name}! Accesso effettuato.`, 'success');
       }
       onClose();
     } else {
@@ -88,15 +147,54 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
     }
   };
 
-  const handleSubmit = (e) => {
+  // Submit Initial Owner Setup (Available ONLY when ownerCount === 0)
+  const handleInitialSetupSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
+
+    if (password !== confirmPassword) {
+      setError('Le password non coincidono.');
+      setLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('La password deve avere almeno 6 caratteri.');
+      setLoading(false);
+      return;
+    }
+
+    const res = await setupInitialOwner({
+      name,
+      email,
+      password,
+      confirmPassword
+    });
+
+    setLoading(false);
+    if (res.success) {
+      if (onShowToast) {
+        onShowToast(`👑 Account OWNER configurato con successo! Benvenuto, ${res.user.name}!`, 'success');
+      }
+      onClose();
+    } else {
+      setError(res.error || 'Errore durante la configurazione iniziale dell\'Owner.');
+    }
+  };
+
+  // Submit Login or Public User Registration
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
 
     if (activeTab === 'login') {
-      const res = login(email, password);
+      const res = await login(email, password);
+      setLoading(false);
       if (res.success) {
         if (onShowToast) {
-          const roleLabel = res.user.role === 'owner' ? 'SuperAdmin' : res.user.role === 'moderator' ? 'Moderatore' : 'Utente';
+          const roleLabel = res.user.role === 'owner' ? '👑 OWNER' : res.user.role === 'moderator' ? '🛡️ MODERATORE' : 'UTENTE';
           onShowToast(`Accesso effettuato come ${roleLabel} (${res.user.name})!`, 'success');
         }
         onClose();
@@ -106,10 +204,11 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
     } else if (activeTab === 'register') {
       if (!name) {
         setError('Inserisci il tuo nome');
+        setLoading(false);
         return;
       }
-      // Strictly registers as normal consumer/user
-      const res = register(name, email, password);
+      const res = await register(name, email, password);
+      setLoading(false);
       if (res.success) {
         if (onShowToast) {
           onShowToast(`Account creato con successo! Benvenuto su Heets, ${res.user.name}!`, 'success');
@@ -121,6 +220,71 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
     }
   };
 
+  // Password Reset Step 1: Request Token
+  const handleRequestReset = (e) => {
+    e.preventDefault();
+    setError('');
+    setResetMessage('');
+
+    const res = requestPasswordReset(resetEmail);
+    if (res.success) {
+      setResetMessage(`Codice di recupero emesso: ${res.token}. Inseriscilo qui sotto insieme alla nuova password.`);
+      setResetCode(res.token);
+      setResetStep(2);
+      if (onShowToast) onShowToast(`Codice di recupero inviato per ${resetEmail}!`, 'info');
+    } else {
+      setError(res.error);
+    }
+  };
+
+  // Password Reset Step 2: Complete Reset
+  const handleCompleteReset = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    const res = await completePasswordReset({
+      email: resetEmail,
+      token: resetCode,
+      newPassword,
+      confirmPassword: confirmNewPassword
+    });
+
+    setLoading(false);
+    if (res.success) {
+      if (onShowToast) onShowToast('Password reimpostata con successo! Ora puoi effettuare il login.', 'success');
+      setActiveTab('login');
+      setEmail(resetEmail);
+      setPassword('');
+      setResetStep(1);
+    } else {
+      setError(res.error);
+    }
+  };
+
+  // Emergency Server Key Recovery
+  const handleEmergencyRecovery = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    const res = await emergencyRecoverOwner({
+      emergencyKey,
+      name: emergencyName,
+      email: emergencyEmail,
+      newPassword: emergencyPassword,
+      confirmPassword: emergencyConfirmPass
+    });
+
+    setLoading(false);
+    if (res.success) {
+      if (onShowToast) onShowToast('Ripristino di emergenza completato con successo! Accesso effettuato come OWNER.', 'success');
+      onClose();
+    } else {
+      setError(res.error);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto bg-black/85 backdrop-blur-xl animate-fadeIn">
       <div className="relative w-full max-w-md bg-alpine-900 border border-cyan-500/30 rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
@@ -128,16 +292,25 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
         {/* Header */}
         <div className="p-6 border-b border-cyan-500/15 flex items-center justify-between bg-alpine-850">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-              <IcebergLogoIcon className="w-5 h-5" />
+            <div className={`p-2 rounded-xl border ${
+              activeTab === 'setup'
+                ? 'bg-amber-400/20 text-amber-300 border-amber-400/40'
+                : 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
+            }`}>
+              {activeTab === 'setup' ? <Crown className="w-5 h-5 text-amber-300" /> : <IcebergLogoIcon className="w-5 h-5" />}
             </div>
             <div>
               <h3 className="font-display font-black text-lg text-white uppercase tracking-tight">
+                {activeTab === 'setup' && 'INITIAL OWNER SETUP'}
                 {activeTab === 'login' && 'ACCEDI A HEETS'}
                 {activeTab === 'register' && 'REGISTRATI'}
                 {activeTab === 'invite' && 'ATTIVA INVITO MODERATORE'}
+                {activeTab === 'forgot' && 'RECUPERO PASSWORD'}
+                {activeTab === 'emergency' && 'RECUPERO EMERGENZA OWNER'}
               </h3>
-              <p className="text-[10px] text-cyan-400 font-mono">Pinzolo & Madonna di Campiglio</p>
+              <p className="text-[10px] text-cyan-400 font-mono">
+                {activeTab === 'setup' ? 'Configurazione Primo Proprietario' : 'Pinzolo & Madonna di Campiglio'}
+              </p>
             </div>
           </div>
 
@@ -152,83 +325,155 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
           
-          {/* Mode Tabs */}
-          <div className="flex rounded-xl bg-alpine-950 p-1 border border-cyan-500/15">
-            <button
-              onClick={() => {
-                setActiveTab('login');
-                setError('');
-              }}
-              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-                activeTab === 'login' ? 'bg-cyan-400 text-black font-extrabold shadow-glow-cyan' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              Accedi
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('register');
-                setError('');
-              }}
-              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-                activeTab === 'register' ? 'bg-cyan-400 text-black font-extrabold shadow-glow-cyan' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              Registrati
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('invite');
-                setError('');
-              }}
-              className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-                activeTab === 'invite' ? 'bg-cyan-400 text-black font-extrabold shadow-glow-cyan' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              Usa Codice
-            </button>
-          </div>
+          {/* TOP NAVIGATION TABS (Shown if Owner exists; If NO owner, setup is forced) */}
+          {hasOwner ? (
+            <div className="flex rounded-xl bg-alpine-950 p-1 border border-cyan-500/15">
+              <button
+                onClick={() => {
+                  setActiveTab('login');
+                  setError('');
+                }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                  activeTab === 'login' ? 'bg-cyan-400 text-black font-extrabold shadow-glow-cyan' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Accedi
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab('register');
+                  setError('');
+                }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                  activeTab === 'register' ? 'bg-cyan-400 text-black font-extrabold shadow-glow-cyan' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Registrati
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab('invite');
+                  setError('');
+                }}
+                className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                  activeTab === 'invite' ? 'bg-cyan-400 text-black font-extrabold shadow-glow-cyan' : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Usa Invito
+              </button>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-2xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs space-y-1">
+              <div className="flex items-center gap-2 font-bold font-mono">
+                <Crown className="w-4 h-4 text-amber-400" />
+                <span>NESSUN OWNER REGISTRATO (CONFIGURAZIONE INIZIALE)</span>
+              </div>
+              <p className="text-[11px] text-zinc-300">
+                Sei il proprietario iniziale del sito: configura il tuo account <strong>OWNER</strong> per accedere subito al pannello e invitare i moderatori.
+              </p>
+            </div>
+          )}
 
           {error && (
-            <div className="p-3.5 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+            <div className="p-3.5 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-xs flex items-center gap-2 animate-fadeIn">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
-          {/* TAB 1 & 2: LOGIN / USER REGISTER */}
-          {activeTab !== 'invite' && (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {activeTab === 'register' && (
-                <div>
-                  <label className="block text-[11px] font-mono text-zinc-400 mb-1">Nome e Cognome *</label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
-                    <input
-                      type="text"
-                      required
-                      placeholder="Mario Rossi"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
-                    />
-                  </div>
-                  <p className="text-[10px] text-zinc-500 mt-1 font-mono">
-                    La registrazione pubblica crea un account <strong>Utente / Community</strong>.
-                  </p>
-                </div>
-              )}
-
+          {/* ==================================================== */}
+          {/* TAB 0: INITIAL OWNER SETUP (ONLY when ownerCount === 0) */}
+          {/* ==================================================== */}
+          {!hasOwner && activeTab === 'setup' && (
+            <form onSubmit={handleInitialSetupSubmit} className="space-y-4 animate-fadeIn">
               <div>
-                <label className="block text-[11px] font-mono text-zinc-400 mb-1">
-                  {activeTab === 'login' ? 'Email o Username (SuperAdmin: admin)' : 'Email *'}
-                </label>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Nome e Cognome Proprietario *</label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                  <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
                   <input
                     type="text"
                     required
-                    placeholder={activeTab === 'login' ? 'admin oppure la tua email' : 'iltuonome@email.it'}
+                    placeholder="Mario Rossi (Proprietario Heets)"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-alpine-950 border border-amber-400/30 focus:border-amber-400 text-white text-sm focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Email Proprietario (Accesso OWNER) *</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="latuaemail@heets.it"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-alpine-950 border border-amber-400/30 focus:border-amber-400 text-white text-sm focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Password Proprietario (min. 6 caratteri) *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-alpine-950 border border-amber-400/30 focus:border-amber-400 text-white text-sm focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Conferma Password *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-alpine-950 border border-amber-400/30 focus:border-amber-400 text-white text-sm focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-extrabold text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(251,191,36,0.4)] transition-all disabled:opacity-50"
+              >
+                <Crown className="w-4 h-4" />
+                <span>{loading ? 'Configurazione in corso...' : 'Crea Account OWNER e Accedi Subito'}</span>
+              </button>
+
+              <p className="text-[10px] text-zinc-400 text-center font-mono pt-1">
+                La procedura è protetta e può essere eseguita <strong>una sola volta</strong>.
+              </p>
+            </form>
+          )}
+
+          {/* ==================================================== */}
+          {/* TAB 1: LOGIN (Owner, Moderator, User) */}
+          {/* ==================================================== */}
+          {hasOwner && activeTab === 'login' && (
+            <form onSubmit={handleSubmit} className="space-y-4 animate-fadeIn">
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Email di Accesso *</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="latuaemail@email.it"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
@@ -237,7 +482,20 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
               </div>
 
               <div>
-                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Password *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-mono text-zinc-400">Password *</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('forgot');
+                      setError('');
+                      setResetEmail(email);
+                    }}
+                    className="text-[10px] text-cyan-400 hover:underline font-mono"
+                  >
+                    Password dimenticata?
+                  </button>
+                </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
                   <input
@@ -253,36 +511,105 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
 
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all disabled:opacity-50"
               >
-                <span>{activeTab === 'login' ? 'Accedi' : 'Crea Account Utente'}</span>
+                <span>{loading ? 'Accesso in corso...' : 'Accedi'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              {activeTab === 'login' && (
-                <div className="pt-2 text-center">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('invite')}
-                    className="text-[11px] text-cyan-400 hover:underline font-mono"
-                  >
-                    Hai un codice invito da SuperAdmin? Attiva qui il tuo account Moderatore →
-                  </button>
-                </div>
-              )}
+              <div className="pt-2 text-center space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('invite');
+                    setError('');
+                  }}
+                  className="text-[11px] text-cyan-400 hover:underline font-mono block mx-auto"
+                >
+                  Hai un codice invito da Owner? Attiva account Moderatore →
+                </button>
+              </div>
             </form>
           )}
 
-          {/* TAB 3: REGISTER WITH SINGLE-USE INVITE CODE */}
+          {/* ==================================================== */}
+          {/* TAB 2: PUBLIC USER REGISTRATION */}
+          {/* ==================================================== */}
+          {hasOwner && activeTab === 'register' && (
+            <form onSubmit={handleSubmit} className="space-y-4 animate-fadeIn">
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Nome e Cognome *</label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    required
+                    placeholder="Mario Rossi"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Email *</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="mario.rossi@email.it"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Password (min. 6 caratteri) *</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all disabled:opacity-50"
+              >
+                <span>{loading ? 'Creazione account...' : 'Crea Account Utente'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <p className="text-[10px] text-zinc-500 text-center font-mono">
+                La registrazione pubblica assegna strettamente il ruolo <strong>Utente</strong>.
+              </p>
+            </form>
+          )}
+
+          {/* ==================================================== */}
+          {/* TAB 3: REGISTER WITH SINGLE-USE INVITE CODE (MODERATOR) */}
+          {/* ==================================================== */}
           {activeTab === 'invite' && (
-            <div className="space-y-4">
+            <div className="space-y-4 animate-fadeIn">
               <div className="p-3.5 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 space-y-1">
                 <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-cyan-300">
                   <KeyRound className="w-4 h-4 text-cyan-400" />
                   Attivazione Account Moderatore
                 </div>
                 <p className="text-[11px] text-zinc-300 leading-relaxed">
-                  Inserisci il <strong>codice invito privato</strong> ricevuto dal SuperAdmin (es. <code className="text-cyan-300">MOD-9K2F7</code>).
+                  Inserisci il <strong>codice invito privato</strong> ricevuto dall'Owner (es. <code className="text-cyan-300">MOD-9K2F7</code>).
                 </p>
               </div>
 
@@ -304,7 +631,7 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
                     onClick={handleVerifyToken}
                     className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all"
                   >
-                    <span>Verifica Codice</span>
+                    <span>Verifica Codice Invito</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -355,14 +682,230 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
 
                   <button
                     type="submit"
-                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all"
+                    disabled={loading}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all disabled:opacity-50"
                   >
                     <Shield className="w-4 h-4" />
-                    <span>Attiva Account Moderatore</span>
+                    <span>{loading ? 'Attivazione...' : 'Attiva Account Moderatore'}</span>
                   </button>
                 </form>
               )}
             </div>
+          )}
+
+          {/* ==================================================== */}
+          {/* TAB 4: PASSWORD RESET ("PASSWORD DIMENTICATA?") */}
+          {/* ==================================================== */}
+          {activeTab === 'forgot' && (
+            <div className="space-y-4 animate-fadeIn">
+              <div className="p-3.5 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-cyan-300">
+                  <RefreshCw className="w-4 h-4 text-cyan-400" />
+                  Recupero Password Sicuro
+                </div>
+                <p className="text-[11px] text-zinc-300 leading-relaxed">
+                  Reimposta la password del tuo account (Owner, Moderatore o Utente) mantenendo inalterato il tuo ruolo.
+                </p>
+              </div>
+
+              {resetMessage && (
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono">
+                  {resetMessage}
+                </div>
+              )}
+
+              {resetStep === 1 ? (
+                <form onSubmit={handleRequestReset} className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-mono text-zinc-400 mb-1">Email dell'Account *</label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                      <input
+                        type="email"
+                        required
+                        placeholder="latuaemail@email.it"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all"
+                  >
+                    <span>Genera Codice di Recupero</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+
+                  <div className="pt-2 flex justify-between items-center text-[11px] font-mono text-zinc-400">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('login');
+                        setError('');
+                      }}
+                      className="hover:text-cyan-300 hover:underline"
+                    >
+                      ← Torna al Login
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('emergency');
+                        setError('');
+                      }}
+                      className="text-amber-400 hover:underline"
+                    >
+                      Recupero Emergenza Server Key
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={handleCompleteReset} className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-mono text-zinc-400 mb-1">Codice di Recupero Ricevuto *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="es. RESET-XXXXXX"
+                      value={resetCode}
+                      onChange={(e) => setResetCode(e.target.value.toUpperCase())}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-cyan-300 font-mono font-bold text-sm tracking-widest uppercase focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-mono text-zinc-400 mb-1">Nuova Password *</label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-mono text-zinc-400 mb-1">Conferma Nuova Password *</label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={confirmNewPassword}
+                      onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all disabled:opacity-50"
+                  >
+                    <span>{loading ? 'Salvataggio...' : 'Conferma Nuova Password'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetStep(1);
+                      setError('');
+                    }}
+                    className="text-[11px] text-zinc-400 hover:underline font-mono block mx-auto text-center"
+                  >
+                    ← Modifica email di recupero
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* ==================================================== */}
+          {/* TAB 5: EMERGENCY OWNER SERVER KEY RECOVERY */}
+          {/* ==================================================== */}
+          {activeTab === 'emergency' && (
+            <form onSubmit={handleEmergencyRecovery} className="space-y-4 animate-fadeIn">
+              <div className="p-3.5 rounded-2xl bg-red-950/40 border border-red-500/30 text-red-300 text-xs space-y-1">
+                <div className="flex items-center gap-2 font-bold font-mono">
+                  <Shield className="w-4 h-4 text-red-400" />
+                  <span>PROCEDURA DI EMERGENZA SERVER OWNER</span>
+                </div>
+                <p className="text-[11px] text-zinc-300">
+                  Utilizzabile esclusivamente dall'amministratore del server tramite la Master Recovery Key configurata nel file di ambiente.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Chiave Master Emergenza Server *</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Master Recovery Key"
+                  value={emergencyKey}
+                  onChange={(e) => setEmergencyKey(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-red-500/30 focus:border-red-400 text-white text-sm focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Nuova Email Owner *</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="owner@email.it"
+                  value={emergencyEmail}
+                  onChange={(e) => setEmergencyEmail(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Nuova Password *</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={emergencyPassword}
+                  onChange={(e) => setEmergencyPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Conferma Nuova Password *</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={emergencyConfirmPass}
+                  onChange={(e) => setEmergencyConfirmPass(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg transition-all disabled:opacity-50"
+              >
+                <Shield className="w-4 h-4" />
+                <span>{loading ? 'Verifica chiave...' : 'Ripristina Account OWNER'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('login');
+                  setError('');
+                }}
+                className="text-[11px] text-zinc-400 hover:underline font-mono block mx-auto text-center pt-1"
+              >
+                ← Torna al Login
+              </button>
+            </form>
           )}
 
         </div>
