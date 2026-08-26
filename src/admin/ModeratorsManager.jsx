@@ -100,29 +100,29 @@ export const ModeratorsManager = ({ onShowToast }) => {
     }
   };
 
-  const handleDeactivate = (email, name) => {
+  const handleDeactivate = async (modId, name, email) => {
     if (confirm(`Disattivare l'accesso del moderatore "${name}" (${email})?`)) {
-      deactivateModerator(email);
-      if (onShowToast) onShowToast(`Moderatore ${name} disattivato.`, 'info');
+      const res = await deactivateModerator(modId);
+      if (res.success && onShowToast) onShowToast(`Moderatore ${name} disattivato.`, 'info');
     }
   };
 
-  const handleActivate = (email, name) => {
-    activateModerator(email);
-    if (onShowToast) onShowToast(`Accesso moderatore ${name} riattivato.`, 'success');
+  const handleActivate = async (modId, name) => {
+    const res = await activateModerator(modId);
+    if (res.success && onShowToast) onShowToast(`Accesso moderatore ${name} riattivato.`, 'success');
   };
 
-  const handleRemove = (email, name) => {
+  const handleRemove = async (modId, name, email) => {
     if (confirm(`ATTENZIONE: Rimuovere DEFINITIVAMENTE "${name}" (${email}) dal team dei moderatori?`)) {
-      removeModerator(email);
-      if (onShowToast) onShowToast(`Moderatore ${name} rimosso dal team.`, 'info');
+      const res = await removeModerator(modId);
+      if (res.success && onShowToast) onShowToast(`Moderatore ${name} rimosso dal team.`, 'info');
     }
   };
 
-  const handleRevokeInvite = (inviteId, code) => {
+  const handleRevokeInvite = async (inviteId, code) => {
     if (confirm(`Revocare il codice invito ${code}? Non potrà più essere utilizzato.`)) {
-      revokeModeratorInvite(inviteId);
-      if (onShowToast) onShowToast(`Codice ${code} revocato.`, 'info');
+      const res = await revokeModeratorInvite(inviteId);
+      if (res.success && onShowToast) onShowToast(`Codice ${code} revocato.`, 'info');
     }
   };
 
@@ -433,7 +433,7 @@ export const ModeratorsManager = ({ onShowToast }) => {
                     <div className="flex items-center gap-2">
                       {mod.isActive !== false ? (
                         <button
-                          onClick={() => handleDeactivate(mod.email, mod.name)}
+                          onClick={() => handleDeactivate(mod.id, mod.name, mod.email)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 text-xs font-bold transition-colors"
                           title="Disattiva l'accesso"
                         >
@@ -442,7 +442,7 @@ export const ModeratorsManager = ({ onShowToast }) => {
                         </button>
                       ) : (
                         <button
-                          onClick={() => handleActivate(mod.email, mod.name)}
+                          onClick={() => handleActivate(mod.id, mod.name)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-colors"
                           title="Riattiva l'accesso"
                         >
@@ -452,7 +452,7 @@ export const ModeratorsManager = ({ onShowToast }) => {
                       )}
 
                       <button
-                        onClick={() => handleRemove(mod.email, mod.name)}
+                        onClick={() => handleRemove(mod.id, mod.name, mod.email)}
                         className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/25 text-red-400 border border-red-500/30 transition-colors"
                         title="Rimuovi definitivamente"
                       >

@@ -1,813 +1,644 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { INITIAL_USERS } from '../data/initialData';
-import { hashPassword, verifyPassword, generateSalt, generateInviteCode } from '../lib/authCrypto';
+import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
 const AuthContext = createContext();
 
-const STORAGE_KEY = 'heets_auth_user_v4';
-const USERS_STORAGE_KEY = 'heets_registered_users_v4';
-const INVITES_STORAGE_KEY = 'heets_moderator_invites_v4';
-const AUDIT_STORAGE_KEY = 'heets_audit_logs_v4';
-const RESETS_STORAGE_KEY = 'heets_password_resets_v4';
-
-// Default emergency recovery key (can be overridden in production via VITE_EMERGENCY_RECOVERY_KEY)
-const EMERGENCY_RECOVERY_KEY = import.meta.env.VITE_EMERGENCY_RECOVERY_KEY || 'HEETS-MASTER-RECOVERY-KEY-2026';
-
 export const AuthProvider = ({ children }) => {
-  // 1. Current Session User
-  const [user, setUser] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  // 1. Current Authenticated Profile
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [hasOwner, setHasOwner] = useState(false);
+  const [moderators, setModerators] = useState([]);
+  const [invitesList, setInvitesList] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
 
-  // 2. Persistent Users Database (Initial: starts empty if no owner setup yet)
-  const [usersList, setUsersList] = useState(() => {
+  // Fetch full user profile from 'profiles' table
+  const fetchUserProfile = useCallback(async (userId, fallbackEmail = '') => {
+    if (!supabase || !userId) return null;
     try {
-      const saved = localStorage.getItem(USERS_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, name, role, avatar, is_active, created_at')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('[Auth] Error fetching profile:', error.message);
+        return null;
       }
-      return INITIAL_USERS;
-    } catch {
-      return INITIAL_USERS;
-    }
-  });
 
-  // 3. Persistent Moderator Invites Database
-  const [invitesList, setInvitesList] = useState(() => {
-    try {
-      const saved = localStorage.getItem(INVITES_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // 4. Password Reset Requests
-  const [resetTokens, setResetTokens] = useState(() => {
-    try {
-      const saved = localStorage.getItem(RESETS_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // 5. Audit Log System
-  const [auditLogs, setAuditLogs] = useState(() => {
-    try {
-      const saved = localStorage.getItem(AUDIT_STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [
-      {
-        id: 'log-sys-init',
-        timestamp: new Date().toISOString(),
-        actorEmail: 'system',
-        actorName: 'Sistema Heets',
-        actorRole: 'system',
-        action: 'AVVIO_SISTEMA_AUTENTICAZIONE',
-        target: 'Configurazione Ruoli',
-        details: 'Sistema avviato con controllo Initial Owner Setup.'
-      }
-    ];
-  });
-
-  // Sync state to persistent storage
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(usersList));
-  }, [usersList]);
-
-  useEffect(() => {
-    localStorage.setItem(INVITES_STORAGE_KEY, JSON.stringify(invitesList));
-  }, [invitesList]);
-
-  useEffect(() => {
-    localStorage.setItem(RESETS_STORAGE_KEY, JSON.stringify(resetTokens));
-  }, [resetTokens]);
-
-  useEffect(() => {
-    localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(auditLogs));
-  }, [auditLogs]);
-
-  // Real-time security verification: Check if current active session user is valid & active
-  useEffect(() => {
-    if (user) {
-      const currentInDb = usersList.find(u => u.email.toLowerCase() === user.email.toLowerCase());
-      if (!currentInDb) {
-        // User was removed from database
-        setUser(null);
-      } else if (currentInDb.role === 'moderator' && currentInDb.isActive === false) {
-        // Moderator was deactivated by Owner -> immediate revocation of access
-        setUser(null);
-      } else if (currentInDb.role !== user.role) {
-        // Role was updated in DB
-        setUser(prev => ({ ...prev, role: currentInDb.role }));
-      }
-    }
-  }, [usersList, user]);
-
-  // Helper to record an administrative action in the Audit Log
-  const recordAuditAction = useCallback((action, target, details) => {
-    const actor = user || { email: 'sistema@heets.it', name: 'Sistema', role: 'system' };
-    const newEntry = {
-      id: 'log-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
-      timestamp: new Date().toISOString(),
-      actorEmail: actor.email,
-      actorName: actor.name,
-      actorRole: actor.role,
-      action,
-      target: target || 'Generale',
-      details: details || ''
-    };
-    setAuditLogs(prev => [newEntry, ...prev]);
-  }, [user]);
-
-  // Owner count calculation
-  const ownerCount = usersList.filter(u => u.role === 'owner').length;
-  const hasOwner = ownerCount > 0;
-
-  // ==========================================
-  // 1. INITIAL OWNER SETUP (Available ONLY when ownerCount === 0)
-  // ==========================================
-  const setupInitialOwner = async ({ name, email, password, confirmPassword }) => {
-    // STRICT SECURITY CHECK: Allow setup ONLY if NO Owner exists
-    const currentOwners = usersList.filter(u => u.role === 'owner');
-    if (currentOwners.length > 0) {
-      return {
-        success: false,
-        error: 'Configurazione iniziale già completata. Esiste già un account Owner nel sistema.'
-      };
-    }
-
-    const cleanName = (name || '').trim();
-    const cleanEmail = (email || '').trim().toLowerCase();
-    const cleanPass = password || '';
-
-    if (!cleanName) {
-      return { success: false, error: 'Inserisci il tuo nome completo.' };
-    }
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      return { success: false, error: 'Inserisci un indirizzo email valido.' };
-    }
-    if (cleanPass.length < 6) {
-      return { success: false, error: 'La password deve contenere almeno 6 caratteri.' };
-    }
-    if (cleanPass !== confirmPassword) {
-      return { success: false, error: 'Le password inserite non coincidono.' };
-    }
-
-    // Hash password with cryptographic salt
-    const salt = generateSalt(16);
-    const passwordHash = await hashPassword(cleanPass, salt);
-
-    const newOwner = {
-      name: cleanName,
-      email: cleanEmail,
-      password: passwordHash, // stored as hashed string
-      role: 'owner', // Strictly assigned as OWNER
-      avatar: '👑',
-      isActive: true,
-      isFirstOwner: true,
-      createdAt: new Date().toISOString()
-    };
-
-    // Save owner to persistent user list
-    const updatedUsers = [...usersList.filter(u => u.email.toLowerCase() !== cleanEmail), newOwner];
-    setUsersList(updatedUsers);
-
-    // Immediately log in the Owner
-    const sessionUser = {
-      email: newOwner.email,
-      name: newOwner.name,
-      role: 'owner',
-      avatar: '👑',
-      isActive: true
-    };
-    setUser(sessionUser);
-
-    recordAuditAction(
-      'INITIAL_SETUP_OWNER_COMPLETATO',
-      cleanEmail,
-      `Creato con successo il primo account OWNER (${cleanName} - ${cleanEmail}). Setup iniziale completato e bloccato.`
-    );
-
-    return { success: true, user: sessionUser };
-  };
-
-  // ==========================================
-  // 2. STANDARD LOGIN (Owner, Moderator, User)
-  // ==========================================
-  const login = async (emailOrUsername, password) => {
-    const cleanInput = (emailOrUsername || '').trim().toLowerCase();
-    const cleanPassword = password || '';
-
-    if (!cleanInput || !cleanPassword) {
-      return { success: false, error: 'Inserisci email e password.' };
-    }
-
-    const found = usersList.find(
-      u => u.email.toLowerCase() === cleanInput || (cleanInput.includes('@') ? false : u.name.toLowerCase() === cleanInput)
-    );
-
-    if (!found) {
-      return {
-        success: false,
-        error: 'Nessun account trovato con queste credenziali. Verifica email e password.'
-      };
-    }
-
-    // Verify hashed password
-    const isPasswordValid = await verifyPassword(cleanPassword, found.password);
-    if (!isPasswordValid) {
-      return {
-        success: false,
-        error: 'Password non corretta. Riprova o usa il recupero password.'
-      };
-    }
-
-    // Check if moderator is deactivated
-    if (found.role === 'moderator' && found.isActive === false) {
-      return {
-        success: false,
-        error: 'Questo account moderatore è stato disattivato dall\'Owner.'
-      };
-    }
-
-    const sessionUser = {
-      email: found.email,
-      name: found.name,
-      role: found.role, // 'owner' | 'moderator' | 'user'
-      avatar: found.avatar || (found.role === 'owner' ? '👑' : found.role === 'moderator' ? '🛡️' : '⛷️'),
-      isActive: found.isActive !== false
-    };
-
-    setUser(sessionUser);
-
-    if (sessionUser.role === 'owner' || sessionUser.role === 'moderator') {
-      recordAuditAction(
-        'LOGIN_GESTIONALE',
-        'Pannello Gestione',
-        `Accesso effettuato con ruolo ${sessionUser.role.toUpperCase()} (${sessionUser.email})`
-      );
-    }
-
-    return { success: true, user: sessionUser };
-  };
-
-  // ==========================================
-  // 3. PUBLIC REGISTRATION (Strictly ONLY 'user')
-  // ==========================================
-  const register = async (name, email, password) => {
-    const cleanEmail = (email || '').trim().toLowerCase();
-    const cleanName = (name || '').trim();
-    const cleanPass = password || '';
-
-    if (!cleanName) {
-      return { success: false, error: 'Inserisci il tuo nome.' };
-    }
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      return { success: false, error: 'Inserisci un indirizzo email valido.' };
-    }
-    if (cleanPass.length < 6) {
-      return { success: false, error: 'La password deve avere almeno 6 caratteri.' };
-    }
-
-    if (usersList.some(u => u.email.toLowerCase() === cleanEmail)) {
-      return { success: false, error: 'Questa email è già registrata nel sistema.' };
-    }
-
-    // Role is strictly hardcoded to 'user' with NO bypass possible
-    const salt = generateSalt(16);
-    const passwordHash = await hashPassword(cleanPass, salt);
-
-    const newUser = {
-      email: cleanEmail,
-      password: passwordHash,
-      name: cleanName,
-      role: 'user', // Always user
-      avatar: '⛷️',
-      isActive: true,
-      createdAt: new Date().toISOString()
-    };
-
-    const updated = [...usersList, newUser];
-    setUsersList(updated);
-
-    const sessionUser = {
-      email: newUser.email,
-      name: newUser.name,
-      role: 'user',
-      avatar: '⛷️',
-      isActive: true
-    };
-    setUser(sessionUser);
-
-    return { success: true, user: sessionUser };
-  };
-
-  // ==========================================
-  // 4. MODERATOR REGISTRATION VIA INVITE CODE
-  // ==========================================
-  const verifyInviteToken = useCallback((rawToken) => {
-    if (!rawToken) return { valid: false, error: 'Inserisci il codice invito.' };
-
-    const cleanToken = rawToken.trim().toUpperCase();
-    const invite = invitesList.find(inv => inv.token.toUpperCase() === cleanToken);
-    
-    if (!invite) {
-      return { valid: false, error: 'Codice invito non valido o inesistente.' };
-    }
-
-    if (invite.status === 'used') {
-      return { valid: false, error: 'Questo codice invito è già stato utilizzato.' };
-    }
-
-    if (invite.status === 'revoked') {
-      return { valid: false, error: 'Questo codice invito è stato revocato dall\'Owner.' };
-    }
-
-    if (new Date(invite.expiresAt) < new Date()) {
-      return { valid: false, error: 'Questo codice invito è scaduto. Richiedine uno nuovo all\'Owner.' };
-    }
-
-    return { valid: true, invite };
-  }, [invitesList]);
-
-  const registerWithInvite = async ({ token, name, email, password }) => {
-    const verification = verifyInviteToken(token);
-    if (!verification.valid) {
-      return { success: false, error: verification.error };
-    }
-
-    const { invite } = verification;
-    const finalEmail = (invite.email && invite.email !== 'Qualsiasi email autorizzata' ? invite.email : email || '').toLowerCase().trim();
-    const cleanName = (name || '').trim();
-    const cleanPass = password || '';
-
-    if (!cleanName) {
-      return { success: false, error: 'Inserisci il tuo nome.' };
-    }
-    if (!finalEmail || !finalEmail.includes('@')) {
-      return { success: false, error: 'Inserisci un indirizzo email valido.' };
-    }
-    if (cleanPass.length < 6) {
-      return { success: false, error: 'La password deve contenere almeno 6 caratteri.' };
-    }
-
-    const salt = generateSalt(16);
-    const passwordHash = await hashPassword(cleanPass, salt);
-
-    const existingIndex = usersList.findIndex(u => u.email.toLowerCase() === finalEmail);
-
-    const newModUser = {
-      email: finalEmail,
-      password: passwordHash,
-      name: cleanName,
-      role: 'moderator', // Verified moderator role granted only via valid invite code
-      avatar: '🛡️',
-      isActive: true,
-      invitedBy: invite.invitedBy,
-      createdAt: new Date().toISOString()
-    };
-
-    let updatedUsers;
-    if (existingIndex >= 0) {
-      // If user existed as normal user, elevate strictly to moderator via valid invite
-      updatedUsers = [...usersList];
-      updatedUsers[existingIndex] = { ...updatedUsers[existingIndex], ...newModUser };
-    } else {
-      updatedUsers = [...usersList, newModUser];
-    }
-
-    setUsersList(updatedUsers);
-
-    // Invalidate / mark invite code as used immediately
-    const updatedInvites = invitesList.map(inv =>
-      inv.token.toUpperCase() === token.trim().toUpperCase()
-        ? { ...inv, status: 'used', usedAt: new Date().toISOString(), usedBy: newModUser.email }
-        : inv
-    );
-    setInvitesList(updatedInvites);
-
-    const sessionUser = {
-      email: newModUser.email,
-      name: newModUser.name,
-      role: 'moderator',
-      avatar: '🛡️',
-      isActive: true
-    };
-    setUser(sessionUser);
-
-    recordAuditAction(
-      'ATTIVAZIONE_MODERATORE',
-      finalEmail,
-      `Nuovo moderatore "${newModUser.name}" (${finalEmail}) attivato tramite codice ${invite.token}`
-    );
-
-    return { success: true, user: sessionUser };
-  };
-
-  // ==========================================
-  // 5. OWNER ONLY: CREATE INVITE CODE
-  // ==========================================
-  const createModeratorInvite = (emailToInvite = '', note = '') => {
-    if (user?.role !== 'owner') {
-      return { success: false, error: 'Operazione riservata esclusivamente all\'Owner del sito.' };
-    }
-
-    const cleanEmail = (emailToInvite || '').trim().toLowerCase();
-    const token = generateInviteCode('MOD');
-    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(); // 72 hours validity
-
-    const newInvite = {
-      id: 'inv-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-      token,
-      email: cleanEmail || 'Qualsiasi email autorizzata',
-      note: note || 'Invito moderatore',
-      invitedBy: user.email,
-      createdAt: new Date().toISOString(),
-      expiresAt,
-      status: 'pending',
-      usedAt: null,
-      usedBy: null
-    };
-
-    setInvitesList(prev => [newInvite, ...prev]);
-
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const inviteLink = `${origin}/?invite=${token}`;
-
-    recordAuditAction(
-      'EMISSIONE_CODICE_MODERATORE',
-      token,
-      `Owner ha emesso il codice invito ${token} per ${newInvite.email} (Scadenza 72h)`
-    );
-
-    return {
-      success: true,
-      invite: newInvite,
-      token,
-      inviteLink
-    };
-  };
-
-  // ==========================================
-  // 6. OWNER ONLY: REVOKE INVITE CODE
-  // ==========================================
-  const revokeModeratorInvite = (inviteId) => {
-    if (user?.role !== 'owner') {
-      return { success: false, error: 'Solo l\'Owner può revocare i codici invito.' };
-    }
-
-    const targetInvite = invitesList.find(i => i.id === inviteId);
-    if (!targetInvite) return { success: false, error: 'Invito non trovato.' };
-
-    setInvitesList(prev =>
-      prev.map(i => (i.id === inviteId ? { ...i, status: 'revoked' } : i))
-    );
-
-    recordAuditAction(
-      'REVOCA_CODICE_MODERATORE',
-      targetInvite.token,
-      `Revocato codice invito ${targetInvite.token}`
-    );
-
-    return { success: true };
-  };
-
-  // ==========================================
-  // 7. OWNER ONLY: MODERATOR MANAGEMENT
-  // ==========================================
-  const deactivateModerator = (emailToDeactivate) => {
-    if (user?.role !== 'owner') {
-      return { success: false, error: 'Solo l\'Owner può disattivare i moderatori.' };
-    }
-
-    const targetUser = usersList.find(u => u.email.toLowerCase() === emailToDeactivate.toLowerCase());
-    if (!targetUser) return { success: false, error: 'Utente non trovato.' };
-    if (targetUser.role === 'owner') return { success: false, error: 'Impossibile disattivare l\'Owner.' };
-
-    setUsersList(prev =>
-      prev.map(u =>
-        u.email.toLowerCase() === emailToDeactivate.toLowerCase()
-          ? { ...u, isActive: false }
-          : u
-      )
-    );
-
-    recordAuditAction(
-      'DISATTIVA_MODERATORE',
-      emailToDeactivate,
-      `Moderatore ${targetUser.name} (${emailToDeactivate}) disattivato dall'Owner.`
-    );
-
-    return { success: true };
-  };
-
-  const activateModerator = (emailToActivate) => {
-    if (user?.role !== 'owner') {
-      return { success: false, error: 'Solo l\'Owner può riattivare i moderatori.' };
-    }
-
-    const targetUser = usersList.find(u => u.email.toLowerCase() === emailToActivate.toLowerCase());
-    if (!targetUser) return { success: false, error: 'Utente non trovato.' };
-
-    setUsersList(prev =>
-      prev.map(u =>
-        u.email.toLowerCase() === emailToActivate.toLowerCase()
-          ? { ...u, isActive: true }
-          : u
-      )
-    );
-
-    recordAuditAction(
-      'RIATTIVA_MODERATORE',
-      emailToActivate,
-      `Moderatore ${targetUser.name} (${emailToActivate}) riattivato dall'Owner.`
-    );
-
-    return { success: true };
-  };
-
-  const removeModerator = (emailToRemove) => {
-    if (user?.role !== 'owner') {
-      return { success: false, error: 'Solo l\'Owner può rimuovere i moderatori.' };
-    }
-
-    const targetUser = usersList.find(u => u.email.toLowerCase() === emailToRemove.toLowerCase());
-    if (!targetUser) return { success: false, error: 'Utente non trovato.' };
-    if (targetUser.role === 'owner') return { success: false, error: 'Impossibile rimuovere l\'Owner.' };
-
-    setUsersList(prev => prev.filter(u => u.email.toLowerCase() !== emailToRemove.toLowerCase()));
-
-    recordAuditAction(
-      'RIMUOVI_MODERATORE',
-      emailToRemove,
-      `Moderatore ${targetUser.name} (${emailToRemove}) rimosso dal team dall'Owner.`
-    );
-
-    return { success: true };
-  };
-
-  const updateSuperAdminProfile = async ({ name, email, password }) => {
-    if (user?.role !== 'owner') {
-      return { success: false, error: 'Solo l\'Owner può modificare il proprio profilo.' };
-    }
-
-    let newPasswordHash = null;
-    if (password && password.trim().length >= 6) {
-      const salt = generateSalt(16);
-      newPasswordHash = await hashPassword(password.trim(), salt);
-    }
-
-    const updatedUsers = usersList.map(u => {
-      if (u.role === 'owner') {
+      if (data) {
         return {
-          ...u,
-          name: name ? name.trim() : u.name,
-          email: email ? email.trim().toLowerCase() : u.email,
-          password: newPasswordHash || u.password
+          id: data.id,
+          email: data.email || fallbackEmail,
+          name: data.name || 'Utente',
+          role: data.role || 'user',
+          avatar: data.avatar || (data.role === 'owner' ? '👑' : data.role === 'moderator' ? '🛡️' : '⛷️'),
+          isActive: data.is_active !== false,
+          createdAt: data.created_at
         };
       }
-      return u;
+      return null;
+    } catch (e) {
+      console.warn('[Auth] Exception fetching profile:', e);
+      return null;
+    }
+  }, []);
+
+  // Check if an Owner exists in the system (Strict boolean from secure RPC)
+  const checkOwnerStatus = useCallback(async () => {
+    if (!supabase) return false;
+    try {
+      const { data: rpcHasOwner, error: rpcErr } = await supabase.rpc('has_owner');
+      if (!rpcErr && typeof rpcHasOwner === 'boolean') {
+        setHasOwner(rpcHasOwner);
+        return rpcHasOwner;
+      }
+    } catch (e) {
+      console.warn('[Auth] Error checking owner status:', e);
+    }
+    return false;
+  }, []);
+
+  // Load team data if authenticated as Owner or Moderator
+  const loadOwnerData = useCallback(async (currentRole) => {
+    if (!supabase) return;
+    if (currentRole !== 'owner' && currentRole !== 'moderator') return;
+
+    try {
+      // Load all moderators
+      const { data: profs } = await supabase
+        .from('profiles')
+        .select('id, email, name, role, avatar, is_active, created_at')
+        .eq('role', 'moderator')
+        .order('created_at', { ascending: false });
+
+      if (profs) {
+        setModerators(profs.map(p => ({
+          id: p.id,
+          email: p.email,
+          name: p.name,
+          role: p.role,
+          avatar: p.avatar,
+          isActive: p.is_active !== false,
+          createdAt: p.created_at
+        })));
+      }
+
+      // Load invites (Owner only)
+      if (currentRole === 'owner') {
+        const { data: invs } = await supabase
+          .from('moderator_invites')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (invs) setInvitesList(invs);
+      }
+
+      // Load audit logs
+      const { data: logs } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (logs) setAuditLogs(logs);
+    } catch (err) {
+      console.warn('[Auth] Error loading admin datasets:', err);
+    }
+  }, []);
+
+  // Helper to record an administrative action
+  const recordAuditAction = useCallback(async (action, target, details) => {
+    if (!supabase || !user) return;
+    try {
+      await supabase.from('audit_logs').insert({
+        actor_id: user.id,
+        actor_email: user.email,
+        actor_name: user.name,
+        actor_role: user.role,
+        action,
+        target: target || 'Generale',
+        details: details || ''
+      });
+    } catch (e) {
+      console.warn('[Auth] Audit log insert failed:', e);
+    }
+  }, [user]);
+
+  // Initial Auth Listener & Session Setup
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(false);
+      return;
+    }
+
+    const initAuth = async () => {
+      try {
+        await checkOwnerStatus();
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && isMounted) {
+          const profile = await fetchUserProfile(session.user.id, session.user.email);
+          if (profile) {
+            if (profile.role === 'moderator' && !profile.isActive) {
+              await supabase.auth.signOut();
+              setUser(null);
+            } else {
+              setUser(profile);
+              loadOwnerData(profile.role);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Auth] Init exception:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    initAuth();
+
+    // Listen to Supabase Auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        if (session?.user) {
+          const profile = await fetchUserProfile(session.user.id, session.user.email);
+          if (profile) {
+            if (profile.role === 'moderator' && !profile.isActive) {
+              await supabase.auth.signOut();
+              setUser(null);
+            } else {
+              setUser(profile);
+              loadOwnerData(profile.role);
+            }
+          }
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setModerators([]);
+        setInvitesList([]);
+      }
+
+      await checkOwnerStatus();
     });
 
-    setUsersList(updatedUsers);
+    // Real-time table updates for profiles and invites
+    const channel = supabase
+      .channel('schema_auth_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async () => {
+        await checkOwnerStatus();
+        if (user) loadOwnerData(user.role);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'moderator_invites' }, async () => {
+        if (user?.role === 'owner') loadOwnerData('owner');
+      })
+      .subscribe();
 
-    const updatedOwner = updatedUsers.find(u => u.role === 'owner');
-    setUser({
-      email: updatedOwner.email,
-      name: updatedOwner.name,
-      role: 'owner',
-      avatar: '👑',
-      isActive: true
-    });
-
-    recordAuditAction(
-      'MODIFICA_PROFILO_OWNER',
-      updatedOwner.email,
-      'Credenziali Owner aggiornate con successo'
-    );
-
-    return { success: true, user: updatedOwner };
-  };
+    return () => {
+      isMounted = false;
+      subscription?.unsubscribe();
+      supabase.removeChannel(channel);
+    };
+  }, [checkOwnerStatus, fetchUserProfile, loadOwnerData, user?.role]);
 
   // ==========================================
-  // 8. SECURE PASSWORD RESET (Recupero Password)
+  // 1. INITIAL OWNER SETUP (Supabase Auth + Atomic Database RPC)
   // ==========================================
-  const requestPasswordReset = (email) => {
+  const setupInitialOwner = async ({ name, email, password, confirmPassword }) => {
+    if (!supabase) return { success: false, error: 'Database Supabase non configurato.' };
+
+    const cleanName = (name || '').trim();
     const cleanEmail = (email || '').trim().toLowerCase();
-    if (!cleanEmail) {
-      return { success: false, error: 'Inserisci la tua email.' };
-    }
+    const cleanPass = password || '';
 
-    const found = usersList.find(u => u.email.toLowerCase() === cleanEmail);
-    if (!found) {
+    if (!cleanName) return { success: false, error: 'Inserisci il tuo nome e cognome.' };
+    if (!cleanEmail || !cleanEmail.includes('@')) return { success: false, error: 'Inserisci un indirizzo email valido.' };
+    if (cleanPass.length < 6) return { success: false, error: 'La password deve avere almeno 6 caratteri.' };
+    if (cleanPass !== confirmPassword) return { success: false, error: 'Le password inserite non coincidono.' };
+
+    // 1. Pre-check: verify NO Owner exists
+    const alreadyHasOwner = await checkOwnerStatus();
+    if (alreadyHasOwner) {
       return {
         success: false,
-        error: 'Nessun account trovato con questo indirizzo email.'
+        error: 'BLOCCATO: Un account OWNER è già stato registrato nel database. La procedura è disabilitata.'
       };
     }
 
-    const resetToken = generateInviteCode('RESET');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour validity
-
-    const newReset = {
-      id: 'rst-' + Date.now(),
-      email: cleanEmail,
-      token: resetToken,
-      expiresAt,
-      status: 'pending'
-    };
-
-    setResetTokens(prev => [newReset, ...prev.filter(r => r.email !== cleanEmail)]);
-
-    recordAuditAction(
-      'RICHIESTA_RESET_PASSWORD',
-      cleanEmail,
-      `Richiesto codice di recupero password per ${cleanEmail}`
-    );
-
-    return {
-      success: true,
-      token: resetToken,
-      email: cleanEmail,
-      message: `Codice di recupero generato: ${resetToken}`
-    };
-  };
-
-  const completePasswordReset = async ({ email, token, newPassword, confirmPassword }) => {
-    const cleanEmail = (email || '').trim().toLowerCase();
-    const cleanToken = (token || '').trim().toUpperCase();
-    const cleanPass = newPassword || '';
-
-    if (!cleanEmail || !cleanToken || !cleanPass) {
-      return { success: false, error: 'Tutti i campi sono obbligatori.' };
-    }
-
-    if (cleanPass.length < 6) {
-      return { success: false, error: 'La nuova password deve contenere almeno 6 caratteri.' };
-    }
-
-    if (cleanPass !== confirmPassword) {
-      return { success: false, error: 'Le password non coincidono.' };
-    }
-
-    const resetRecord = resetTokens.find(
-      r => r.email.toLowerCase() === cleanEmail && r.token.toUpperCase() === cleanToken && r.status === 'pending'
-    );
-
-    if (!resetRecord) {
-      return { success: false, error: 'Codice di recupero non valido o già utilizzato.' };
-    }
-
-    if (new Date(resetRecord.expiresAt) < new Date()) {
-      return { success: false, error: 'Il codice di recupero è scaduto. Richiedine uno nuovo.' };
-    }
-
-    const userIndex = usersList.findIndex(u => u.email.toLowerCase() === cleanEmail);
-    if (userIndex === -1) {
-      return { success: false, error: 'Account non trovato.' };
-    }
-
-    const targetUser = usersList[userIndex];
-    const salt = generateSalt(16);
-    const passwordHash = await hashPassword(cleanPass, salt);
-
-    // STRICT: ONLY password is changed. The role is strictly preserved!
-    const updatedUser = {
-      ...targetUser,
-      password: passwordHash
-    };
-
-    const updatedUsers = [...usersList];
-    updatedUsers[userIndex] = updatedUser;
-    setUsersList(updatedUsers);
-
-    // Invalidate reset token
-    setResetTokens(prev => prev.map(r => r.id === resetRecord.id ? { ...r, status: 'used' } : r));
-
-    recordAuditAction(
-      'RESET_PASSWORD_COMPLETATO',
-      cleanEmail,
-      `Password reimpostata con successo per ${cleanEmail} (Ruolo: ${targetUser.role})`
-    );
-
-    return { success: true };
-  };
-
-  // ==========================================
-  // 9. EMERGENCY OWNER ACCESS RECOVERY
-  // ==========================================
-  const emergencyRecoverOwner = async ({ emergencyKey, name, email, newPassword, confirmPassword }) => {
-    const cleanKey = (emergencyKey || '').trim();
-    if (cleanKey !== EMERGENCY_RECOVERY_KEY) {
-      return {
-        success: false,
-        error: 'Chiave di recupero emergenza server NON valida. Verifica le impostazioni di sistema.'
-      };
-    }
-
-    const cleanName = (name || 'Owner Heets').trim();
-    const cleanEmail = (email || '').trim().toLowerCase();
-    const cleanPass = newPassword || '';
-
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      return { success: false, error: 'Inserisci un indirizzo email valido.' };
-    }
-    if (cleanPass.length < 6) {
-      return { success: false, error: 'La nuova password deve contenere almeno 6 caratteri.' };
-    }
-    if (cleanPass !== confirmPassword) {
-      return { success: false, error: 'Le password non coincidono.' };
-    }
-
-    const salt = generateSalt(16);
-    const passwordHash = await hashPassword(cleanPass, salt);
-
-    const existingOwnerIndex = usersList.findIndex(u => u.role === 'owner');
-
-    let updatedUsers;
-    let recoveredOwner;
-
-    if (existingOwnerIndex >= 0) {
-      recoveredOwner = {
-        ...usersList[existingOwnerIndex],
-        name: cleanName,
+    try {
+      // 2. Register via Supabase Authentication
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: cleanEmail,
-        password: passwordHash,
-        isActive: true
-      };
-      updatedUsers = [...usersList];
-      updatedUsers[existingOwnerIndex] = recoveredOwner;
-    } else {
-      recoveredOwner = {
-        name: cleanName,
+        password: cleanPass,
+        options: {
+          data: { name: cleanName }
+        }
+      });
+
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+          const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: cleanPass
+          });
+          if (signInErr) {
+            return { success: false, error: 'Questa email è già registrata. Effettua il login.' };
+          }
+          authData.user = signInData.user;
+        } else {
+          return { success: false, error: authError.message };
+        }
+      }
+
+      if (!authData?.user) {
+        return { success: false, error: 'Impossibile creare account utente in Supabase Auth.' };
+      }
+
+      // 3. Promote to 'owner' via secure atomic database RPC (uses auth.uid() automatically)
+      const { error: rpcError } = await supabase.rpc('setup_initial_owner', {
+        p_name: cleanName
+      });
+
+      if (rpcError) {
+        return { success: false, error: rpcError.message };
+      }
+
+      // 4. Update session profile state
+      const ownerProfile = {
+        id: authData.user.id,
         email: cleanEmail,
-        password: passwordHash,
+        name: cleanName,
         role: 'owner',
         avatar: '👑',
         isActive: true,
-        isFirstOwner: true,
         createdAt: new Date().toISOString()
       };
-      updatedUsers = [...usersList, recoveredOwner];
+
+      setUser(ownerProfile);
+      setHasOwner(true);
+      await loadOwnerData('owner');
+
+      return { success: true, user: ownerProfile };
+    } catch (err) {
+      return { success: false, error: err.message || 'Errore durante il setup del primo Owner.' };
     }
-
-    setUsersList(updatedUsers);
-
-    const sessionUser = {
-      email: recoveredOwner.email,
-      name: recoveredOwner.name,
-      role: 'owner',
-      avatar: '👑',
-      isActive: true
-    };
-    setUser(sessionUser);
-
-    recordAuditAction(
-      'EMERGENCY_RECOVERY_OWNER',
-      cleanEmail,
-      `Ripristino di emergenza account OWNER effettuato tramite Master Key da ${cleanEmail}`
-    );
-
-    return { success: true, user: sessionUser };
   };
 
-  const logout = () => {
-    if (user?.role === 'owner' || user?.role === 'moderator') {
-      recordAuditAction('LOGOUT', user.email, 'Disconnessione dal pannello');
+  // ==========================================
+  // 2. STANDARD LOGIN (Supabase Auth: Email + Password)
+  // ==========================================
+  const login = async (emailOrUsername, password) => {
+    if (!supabase) return { success: false, error: 'Database Supabase non configurato.' };
+
+    const cleanEmail = (emailOrUsername || '').trim().toLowerCase();
+    const cleanPass = password || '';
+
+    if (!cleanEmail || !cleanPass) {
+      return { success: false, error: 'Inserisci email e password.' };
+    }
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: cleanPass
+      });
+
+      if (authError) {
+        return {
+          success: false,
+          error: authError.message.includes('Invalid login')
+            ? 'Credenziali non corrette. Verifica email e password.'
+            : authError.message
+        };
+      }
+
+      if (!authData?.user) {
+        return { success: false, error: 'Nessun utente trovato.' };
+      }
+
+      const profile = await fetchUserProfile(authData.user.id, authData.user.email);
+      if (!profile) {
+        return { success: false, error: 'Profilo utente non trovato nel database.' };
+      }
+
+      if (profile.role === 'moderator' && !profile.isActive) {
+        await supabase.auth.signOut();
+        return { success: false, error: 'Questo account moderatore è stato disattivato dall\'Owner.' };
+      }
+
+      setUser(profile);
+      loadOwnerData(profile.role);
+
+      recordAuditAction('LOGIN', 'Pannello Gestione', `Accesso effettuato con ruolo ${profile.role.toUpperCase()}`);
+
+      return { success: true, user: profile };
+    } catch (err) {
+      return { success: false, error: err.message || 'Errore durante il login.' };
+    }
+  };
+
+  // ==========================================
+  // 3. PUBLIC REGISTRATION (Strictly creates 'user')
+  // ==========================================
+  const register = async (name, email, password) => {
+    if (!supabase) return { success: false, error: 'Database Supabase non configurato.' };
+
+    const cleanName = (name || '').trim();
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPass = password || '';
+
+    if (!cleanName) return { success: false, error: 'Inserisci il tuo nome.' };
+    if (!cleanEmail || !cleanEmail.includes('@')) return { success: false, error: 'Inserisci un indirizzo email valido.' };
+    if (cleanPass.length < 6) return { success: false, error: 'La password deve avere almeno 6 caratteri.' };
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: cleanPass,
+        options: {
+          data: { name: cleanName }
+        }
+      });
+
+      if (authError) {
+        return { success: false, error: authError.message };
+      }
+
+      const sessionUser = {
+        id: authData.user.id,
+        email: cleanEmail,
+        name: cleanName,
+        role: 'user', // strictly 'user'
+        avatar: '⛷️',
+        isActive: true
+      };
+
+      setUser(sessionUser);
+      return { success: true, user: sessionUser };
+    } catch (err) {
+      return { success: false, error: err.message || 'Errore durante la registrazione.' };
+    }
+  };
+
+  // ==========================================
+  // 4. VERIFY & REGISTER MODERATOR VIA INVITE
+  // ==========================================
+  const verifyInviteToken = useCallback(async (rawToken) => {
+    if (!supabase || !rawToken) return { valid: false, error: 'Inserisci il codice invito.' };
+
+    const cleanToken = rawToken.trim().toUpperCase();
+    try {
+      const { data: invite, error } = await supabase
+        .from('moderator_invites')
+        .select('*')
+        .eq('token', cleanToken)
+        .maybeSingle();
+
+      if (error || !invite) {
+        return { valid: false, error: 'Codice invito non valido o inesistente.' };
+      }
+
+      if (invite.status === 'used') {
+        return { valid: false, error: 'Questo codice invito è già stato utilizzato.' };
+      }
+
+      if (invite.status === 'revoked') {
+        return { valid: false, error: 'Questo codice invito è stato revocato dall\'Owner.' };
+      }
+
+      if (new Date(invite.expires_at) < new Date()) {
+        return { valid: false, error: 'Questo codice invito è scaduto. Richiedine uno nuovo all\'Owner.' };
+      }
+
+      return { valid: true, invite };
+    } catch (err) {
+      return { valid: false, error: 'Errore durante la verifica del codice.' };
+    }
+  }, []);
+
+  const registerWithInvite = async ({ token, name, email, password }) => {
+    if (!supabase) return { success: false, error: 'Database Supabase non configurato.' };
+
+    const cleanName = (name || '').trim();
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanPass = password || '';
+    const cleanToken = (token || '').trim().toUpperCase();
+
+    if (!cleanName) return { success: false, error: 'Inserisci il tuo nome.' };
+    if (!cleanEmail || !cleanEmail.includes('@')) return { success: false, error: 'Inserisci un indirizzo email valido.' };
+    if (cleanPass.length < 6) return { success: false, error: 'La password deve avere almeno 6 caratteri.' };
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: cleanPass,
+        options: { data: { name: cleanName } }
+      });
+
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+          const { error: signInErr } = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: cleanPass
+          });
+          if (signInErr) return { success: false, error: 'Email già registrata con altra password.' };
+        } else {
+          return { success: false, error: authError.message };
+        }
+      }
+
+      // Elevate strictly to moderator via DB RPC (uses auth.uid() automatically)
+      const { error: rpcErr } = await supabase.rpc('register_moderator_with_invite', {
+        p_name: cleanName,
+        p_token: cleanToken
+      });
+
+      if (rpcErr) {
+        return { success: false, error: rpcErr.message };
+      }
+
+      const modProfile = {
+        id: authData?.user?.id,
+        email: cleanEmail,
+        name: cleanName,
+        role: 'moderator',
+        avatar: '🛡️',
+        isActive: true
+      };
+
+      setUser(modProfile);
+      return { success: true, user: modProfile };
+    } catch (err) {
+      return { success: false, error: err.message || 'Errore attivazione moderatore.' };
+    }
+  };
+
+  // ==========================================
+  // 5. OWNER: EMIT & MANAGE INVITES VIA SECURE RPC
+  // ==========================================
+  const createModeratorInvite = async (emailToInvite = '', note = '') => {
+    if (user?.role !== 'owner') return { success: false, error: 'Riservato all\'Owner.' };
+    if (!supabase) return { success: false, error: 'Supabase non pronto.' };
+
+    const cleanEmail = (emailToInvite || '').trim().toLowerCase();
+    try {
+      const { data, error } = await supabase.rpc('create_moderator_invite', {
+        p_email: cleanEmail,
+        p_note: note || ''
+      });
+
+      if (error) return { success: false, error: error.message };
+
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const inviteLink = `${origin}/?invite=${data.token}`;
+
+      if (data.invite) {
+        setInvitesList(prev => [data.invite, ...prev]);
+      }
+
+      return { success: true, invite: data.invite, token: data.token, inviteLink };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const revokeModeratorInvite = async (inviteId) => {
+    if (user?.role !== 'owner') return { success: false, error: 'Riservato all\'Owner.' };
+    try {
+      const { error } = await supabase.rpc('revoke_moderator_invite', {
+        p_invite_id: inviteId
+      });
+
+      if (error) return { success: false, error: error.message };
+      setInvitesList(prev => prev.map(i => i.id === inviteId ? { ...i, status: 'revoked' } : i));
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // ==========================================
+  // 6. OWNER: MANAGE MODERATORS VIA SECURE RPC
+  // ==========================================
+  const deactivateModerator = async (modId) => {
+    if (user?.role !== 'owner') return { success: false, error: 'Riservato all\'Owner.' };
+    try {
+      const { error } = await supabase.rpc('toggle_moderator_status', {
+        p_mod_id: modId,
+        p_active: false
+      });
+
+      if (error) return { success: false, error: error.message };
+      setModerators(prev => prev.map(m => m.id === modId ? { ...m, isActive: false } : m));
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const activateModerator = async (modId) => {
+    if (user?.role !== 'owner') return { success: false, error: 'Riservato all\'Owner.' };
+    try {
+      const { error } = await supabase.rpc('toggle_moderator_status', {
+        p_mod_id: modId,
+        p_active: true
+      });
+
+      if (error) return { success: false, error: error.message };
+      setModerators(prev => prev.map(m => m.id === modId ? { ...m, isActive: true } : m));
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const removeModerator = async (modId) => {
+    if (user?.role !== 'owner') return { success: false, error: 'Riservato all\'Owner.' };
+    try {
+      const { error } = await supabase.rpc('remove_moderator', {
+        p_mod_id: modId
+      });
+
+      if (error) return { success: false, error: error.message };
+      setModerators(prev => prev.filter(m => m.id !== modId));
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const updateSuperAdminProfile = async ({ name, password }) => {
+    if (user?.role !== 'owner') return { success: false, error: 'Riservato all\'Owner.' };
+    try {
+      if (name) {
+        const { error: rpcErr } = await supabase.rpc('update_my_profile', {
+          p_name: name
+        });
+        if (rpcErr) return { success: false, error: rpcErr.message };
+      }
+      if (password && password.length >= 6) {
+        await supabase.auth.updateUser({ password });
+      }
+
+      setUser(prev => ({ ...prev, name: name || prev.name }));
+      recordAuditAction('MODIFICA_PROFILO_OWNER', user.email, 'Credenziali Owner aggiornate');
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // ==========================================
+  // 7. PASSWORD RESET (Supabase Auth Official Email Reset)
+  // ==========================================
+  const requestPasswordReset = async (email) => {
+    if (!supabase) return { success: false, error: 'Supabase non pronto.' };
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) return { success: false, error: 'Inserisci la tua email.' };
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: window.location.origin
+      });
+
+      if (error) return { success: false, error: error.message };
+
+      recordAuditAction('RICHIESTA_RESET_PASSWORD', cleanEmail, 'Inviata email di reset password');
+      return {
+        success: true,
+        email: cleanEmail,
+        message: `Email di recupero inviata a ${cleanEmail}! Controlla la tua casella di posta.`
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // ==========================================
+  // 8. LOGOUT
+  // ==========================================
+  const logout = async () => {
+    if (supabase) {
+      await supabase.auth.signOut();
     }
     setUser(null);
   };
 
-  // Permissions
   const isOwner = user?.role === 'owner';
   const isModerator = (user?.role === 'moderator' && user?.isActive !== false);
   const canManage = isOwner || isModerator;
   const canManageTeam = isOwner;
 
-  const moderators = usersList.filter(u => u.role === 'moderator');
-
   return (
     <AuthContext.Provider
       value={{
         user,
-        ownerCount,
+        loading,
         hasOwner,
         isOwner,
         isModerator,
@@ -815,7 +646,6 @@ export const AuthProvider = ({ children }) => {
         canManageTeam,
         isAdmin: canManage,
         isAuthenticated: !!user,
-        usersList,
         moderators,
         invitesList,
         auditLogs,
@@ -831,8 +661,6 @@ export const AuthProvider = ({ children }) => {
         removeModerator,
         updateSuperAdminProfile,
         requestPasswordReset,
-        completePasswordReset,
-        emergencyRecoverOwner,
         recordAuditAction,
         logout
       }}

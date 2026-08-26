@@ -10,9 +10,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Crown,
-  HelpCircle,
-  RefreshCw,
-  Sparkles
+  RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { IcebergLogoIcon } from './Logo';
@@ -20,18 +18,15 @@ import { IcebergLogoIcon } from './Logo';
 export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = null }) => {
   const {
     hasOwner,
-    ownerCount,
     setupInitialOwner,
     login,
     register,
     verifyInviteToken,
     registerWithInvite,
-    requestPasswordReset,
-    completePasswordReset,
-    emergencyRecoverOwner
+    requestPasswordReset
   } = useAuth();
 
-  // Active view: 'setup' | 'login' | 'register' | 'invite' | 'forgot' | 'emergency'
+  // Active view: 'setup' | 'login' | 'register' | 'invite' | 'forgot'
   const [activeTab, setActiveTab] = useState(() => (!hasOwner ? 'setup' : 'login'));
 
   // Form states
@@ -50,19 +45,8 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
   const [modPassword, setModPassword] = useState('');
 
   // Password reset states
-  const [resetStep, setResetStep] = useState(1); // 1 = request token, 2 = set new password
   const [resetEmail, setResetEmail] = useState('');
-  const [resetCode, setResetCode] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmNewPassword, setConfirmNewPassword] = useState('');
-  const [resetMessage, setResetMessage] = useState('');
-
-  // Emergency recovery states
-  const [emergencyKey, setEmergencyKey] = useState('');
-  const [emergencyEmail, setEmergencyEmail] = useState('');
-  const [emergencyName, setEmergencyName] = useState('Owner Heets');
-  const [emergencyPassword, setEmergencyPassword] = useState('');
-  const [emergencyConfirmPass, setEmergencyConfirmPass] = useState('');
+  const [resetSuccessMessage, setResetSuccessMessage] = useState('');
 
   // Synchronize active tab if owner state changes or invite token is passed
   useEffect(() => {
@@ -77,24 +61,27 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
     if (initialInviteToken) {
       setInviteToken(initialInviteToken);
       setActiveTab('invite');
-      const res = verifyInviteToken(initialInviteToken);
-      if (res.valid) {
-        setVerifiedInvite(res.invite);
-        if (res.invite.email && res.invite.email !== 'Qualsiasi email autorizzata') {
-          setModEmail(res.invite.email);
+      verifyInviteToken(initialInviteToken).then((res) => {
+        if (res.valid) {
+          setVerifiedInvite(res.invite);
+          if (res.invite.email && res.invite.email !== 'Qualsiasi email autorizzata') {
+            setModEmail(res.invite.email);
+          }
+        } else {
+          setError(res.error);
         }
-      } else {
-        setError(res.error);
-      }
+      });
     }
   }, [initialInviteToken, verifyInviteToken]);
 
   if (!isOpen) return null;
 
   // Verify Moderator Invite Token
-  const handleVerifyToken = () => {
+  const handleVerifyToken = async () => {
     setError('');
-    const res = verifyInviteToken(inviteToken.trim());
+    setLoading(true);
+    const res = await verifyInviteToken(inviteToken.trim());
+    setLoading(false);
     if (res.valid) {
       setVerifiedInvite(res.invite);
       if (res.invite.email && res.invite.email !== 'Qualsiasi email autorizzata') {
@@ -147,7 +134,7 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
     }
   };
 
-  // Submit Initial Owner Setup (Available ONLY when ownerCount === 0)
+  // Submit Initial Owner Setup (Available ONLY when no owner exists in DB)
   const handleInitialSetupSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -175,7 +162,7 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
     setLoading(false);
     if (res.success) {
       if (onShowToast) {
-        onShowToast(`👑 Account OWNER configurato con successo! Benvenuto, ${res.user.name}!`, 'success');
+        onShowToast(`👑 Account OWNER creato con successo! Benvenuto, ${res.user.name}!`, 'success');
       }
       onClose();
     } else {
@@ -220,66 +207,18 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
     }
   };
 
-  // Password Reset Step 1: Request Token
-  const handleRequestReset = (e) => {
+  // Password Reset Request (Supabase Auth Email Reset)
+  const handleRequestReset = async (e) => {
     e.preventDefault();
     setError('');
-    setResetMessage('');
-
-    const res = requestPasswordReset(resetEmail);
-    if (res.success) {
-      setResetMessage(`Codice di recupero emesso: ${res.token}. Inseriscilo qui sotto insieme alla nuova password.`);
-      setResetCode(res.token);
-      setResetStep(2);
-      if (onShowToast) onShowToast(`Codice di recupero inviato per ${resetEmail}!`, 'info');
-    } else {
-      setError(res.error);
-    }
-  };
-
-  // Password Reset Step 2: Complete Reset
-  const handleCompleteReset = async (e) => {
-    e.preventDefault();
-    setError('');
+    setResetSuccessMessage('');
     setLoading(true);
 
-    const res = await completePasswordReset({
-      email: resetEmail,
-      token: resetCode,
-      newPassword,
-      confirmPassword: confirmNewPassword
-    });
-
+    const res = await requestPasswordReset(resetEmail);
     setLoading(false);
     if (res.success) {
-      if (onShowToast) onShowToast('Password reimpostata con successo! Ora puoi effettuare il login.', 'success');
-      setActiveTab('login');
-      setEmail(resetEmail);
-      setPassword('');
-      setResetStep(1);
-    } else {
-      setError(res.error);
-    }
-  };
-
-  // Emergency Server Key Recovery
-  const handleEmergencyRecovery = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-
-    const res = await emergencyRecoverOwner({
-      emergencyKey,
-      name: emergencyName,
-      email: emergencyEmail,
-      newPassword: emergencyPassword,
-      confirmPassword: emergencyConfirmPass
-    });
-
-    setLoading(false);
-    if (res.success) {
-      if (onShowToast) onShowToast('Ripristino di emergenza completato con successo! Accesso effettuato come OWNER.', 'success');
-      onClose();
+      setResetSuccessMessage(res.message);
+      if (onShowToast) onShowToast(res.message, 'success');
     } else {
       setError(res.error);
     }
@@ -306,10 +245,9 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
                 {activeTab === 'register' && 'REGISTRATI'}
                 {activeTab === 'invite' && 'ATTIVA INVITO MODERATORE'}
                 {activeTab === 'forgot' && 'RECUPERO PASSWORD'}
-                {activeTab === 'emergency' && 'RECUPERO EMERGENZA OWNER'}
               </h3>
               <p className="text-[10px] text-cyan-400 font-mono">
-                {activeTab === 'setup' ? 'Configurazione Primo Proprietario' : 'Pinzolo & Madonna di Campiglio'}
+                {activeTab === 'setup' ? 'Configurazione Primo Proprietario (Supabase Auth)' : 'Pinzolo & Madonna di Campiglio'}
               </p>
             </div>
           </div>
@@ -325,7 +263,7 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
           
-          {/* TOP NAVIGATION TABS (Shown if Owner exists; If NO owner, setup is forced) */}
+          {/* Navigation Tabs (Available ONLY after first Owner is configured) */}
           {hasOwner ? (
             <div className="flex rounded-xl bg-alpine-950 p-1 border border-cyan-500/15">
               <button
@@ -369,7 +307,7 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
                 <span>NESSUN OWNER REGISTRATO (CONFIGURAZIONE INIZIALE)</span>
               </div>
               <p className="text-[11px] text-zinc-300">
-                Sei il proprietario iniziale del sito: configura il tuo account <strong>OWNER</strong> per accedere subito al pannello e invitare i moderatori.
+                Sei il proprietario del sito: imposta il tuo account <strong>OWNER</strong> su Supabase per accedere subito al pannello e invitare i moderatori.
               </p>
             </div>
           )}
@@ -382,7 +320,7 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
           )}
 
           {/* ==================================================== */}
-          {/* TAB 0: INITIAL OWNER SETUP (ONLY when ownerCount === 0) */}
+          {/* TAB 0: INITIAL OWNER SETUP (ONLY when hasOwner === false) */}
           {/* ==================================================== */}
           {!hasOwner && activeTab === 'setup' && (
             <form onSubmit={handleInitialSetupSubmit} className="space-y-4 animate-fadeIn">
@@ -402,13 +340,13 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
               </div>
 
               <div>
-                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Email Proprietario (Accesso OWNER) *</label>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Email Proprietario (Accesso Supabase Auth) *</label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
                   <input
                     type="email"
                     required
-                    placeholder="latuaemail@heets.it"
+                    placeholder="latuaemail@email.it"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-alpine-950 border border-amber-400/30 focus:border-amber-400 text-white text-sm focus:outline-none"
@@ -452,11 +390,11 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black font-extrabold text-xs uppercase tracking-wider shadow-[0_0_20px_rgba(251,191,36,0.4)] transition-all disabled:opacity-50"
               >
                 <Crown className="w-4 h-4" />
-                <span>{loading ? 'Configurazione in corso...' : 'Crea Account OWNER e Accedi Subito'}</span>
+                <span>{loading ? 'Creazione in corso...' : 'Crea Account OWNER e Accedi Subito'}</span>
               </button>
 
               <p className="text-[10px] text-zinc-400 text-center font-mono pt-1">
-                La procedura è protetta e può essere eseguita <strong>una sola volta</strong>.
+                La procedura è protetta a livello database e può essere eseguita <strong>una sola volta</strong>.
               </p>
             </form>
           )}
@@ -534,7 +472,7 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
           )}
 
           {/* ==================================================== */}
-          {/* TAB 2: PUBLIC USER REGISTRATION */}
+          {/* TAB 2: PUBLIC USER REGISTRATION (Strictly creates 'user') */}
           {/* ==================================================== */}
           {hasOwner && activeTab === 'register' && (
             <form onSubmit={handleSubmit} className="space-y-4 animate-fadeIn">
@@ -593,7 +531,7 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
               </button>
 
               <p className="text-[10px] text-zinc-500 text-center font-mono">
-                La registrazione pubblica assegna strettamente il ruolo <strong>Utente</strong>.
+                La registrazione pubblica assegna strettamente il ruolo <strong>Utente</strong> protetto da RLS.
               </p>
             </form>
           )}
@@ -628,10 +566,11 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
 
                   <button
                     type="button"
+                    disabled={loading}
                     onClick={handleVerifyToken}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all"
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all disabled:opacity-50"
                   >
-                    <span>Verifica Codice Invito</span>
+                    <span>{loading ? 'Verifica...' : 'Verifica Codice Invito'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -694,27 +633,38 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
           )}
 
           {/* ==================================================== */}
-          {/* TAB 4: PASSWORD RESET ("PASSWORD DIMENTICATA?") */}
+          {/* TAB 4: PASSWORD RESET (Supabase Auth Official Email Reset) */}
           {/* ==================================================== */}
           {activeTab === 'forgot' && (
             <div className="space-y-4 animate-fadeIn">
               <div className="p-3.5 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 space-y-1">
                 <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-cyan-300">
                   <RefreshCw className="w-4 h-4 text-cyan-400" />
-                  Recupero Password Sicuro
+                  Recupero Password tramite Supabase Auth
                 </div>
                 <p className="text-[11px] text-zinc-300 leading-relaxed">
-                  Reimposta la password del tuo account (Owner, Moderatore o Utente) mantenendo inalterato il tuo ruolo.
+                  Riceverai un link sicuro via email per reimpostare la tua password senza modificare il tuo ruolo.
                 </p>
               </div>
 
-              {resetMessage && (
-                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono">
-                  {resetMessage}
+              {resetSuccessMessage ? (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs space-y-2">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    {resetSuccessMessage}
+                  </p>
+                  <p className="text-zinc-400 text-[11px]">
+                    Clicca sul link ricevuto per impostare una nuova password, poi torna qui ed effettua il login.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('login')}
+                    className="mt-2 block w-full py-2 rounded-xl bg-emerald-500 text-black font-bold text-xs uppercase text-center"
+                  >
+                    Torna al Login
+                  </button>
                 </div>
-              )}
-
-              {resetStep === 1 ? (
+              ) : (
                 <form onSubmit={handleRequestReset} className="space-y-4">
                   <div>
                     <label className="block text-[11px] font-mono text-zinc-400 mb-1">Email dell'Account *</label>
@@ -733,179 +683,28 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
 
                   <button
                     type="submit"
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all"
+                    disabled={loading}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all disabled:opacity-50"
                   >
-                    <span>Genera Codice di Recupero</span>
+                    <span>{loading ? 'Invio in corso...' : 'Invia Link di Recupero Password'}</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
 
-                  <div className="pt-2 flex justify-between items-center text-[11px] font-mono text-zinc-400">
+                  <div className="pt-2 text-center">
                     <button
                       type="button"
                       onClick={() => {
                         setActiveTab('login');
                         setError('');
                       }}
-                      className="hover:text-cyan-300 hover:underline"
+                      className="text-[11px] text-zinc-400 hover:text-cyan-300 hover:underline font-mono"
                     >
                       ← Torna al Login
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveTab('emergency');
-                        setError('');
-                      }}
-                      className="text-amber-400 hover:underline"
-                    >
-                      Recupero Emergenza Server Key
-                    </button>
                   </div>
-                </form>
-              ) : (
-                <form onSubmit={handleCompleteReset} className="space-y-4">
-                  <div>
-                    <label className="block text-[11px] font-mono text-zinc-400 mb-1">Codice di Recupero Ricevuto *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="es. RESET-XXXXXX"
-                      value={resetCode}
-                      onChange={(e) => setResetCode(e.target.value.toUpperCase())}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-cyan-300 font-mono font-bold text-sm tracking-widest uppercase focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-mono text-zinc-400 mb-1">Nuova Password *</label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="••••••••"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-mono text-zinc-400 mb-1">Conferma Nuova Password *</label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="••••••••"
-                      value={confirmNewPassword}
-                      onChange={(e) => setConfirmNewPassword(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all disabled:opacity-50"
-                  >
-                    <span>{loading ? 'Salvataggio...' : 'Conferma Nuova Password'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setResetStep(1);
-                      setError('');
-                    }}
-                    className="text-[11px] text-zinc-400 hover:underline font-mono block mx-auto text-center"
-                  >
-                    ← Modifica email di recupero
-                  </button>
                 </form>
               )}
             </div>
-          )}
-
-          {/* ==================================================== */}
-          {/* TAB 5: EMERGENCY OWNER SERVER KEY RECOVERY */}
-          {/* ==================================================== */}
-          {activeTab === 'emergency' && (
-            <form onSubmit={handleEmergencyRecovery} className="space-y-4 animate-fadeIn">
-              <div className="p-3.5 rounded-2xl bg-red-950/40 border border-red-500/30 text-red-300 text-xs space-y-1">
-                <div className="flex items-center gap-2 font-bold font-mono">
-                  <Shield className="w-4 h-4 text-red-400" />
-                  <span>PROCEDURA DI EMERGENZA SERVER OWNER</span>
-                </div>
-                <p className="text-[11px] text-zinc-300">
-                  Utilizzabile esclusivamente dall'amministratore del server tramite la Master Recovery Key configurata nel file di ambiente.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Chiave Master Emergenza Server *</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Master Recovery Key"
-                  value={emergencyKey}
-                  onChange={(e) => setEmergencyKey(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-red-500/30 focus:border-red-400 text-white text-sm focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Nuova Email Owner *</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="owner@email.it"
-                  value={emergencyEmail}
-                  onChange={(e) => setEmergencyEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Nuova Password *</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={emergencyPassword}
-                  onChange={(e) => setEmergencyPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Conferma Nuova Password *</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={emergencyConfirmPass}
-                  onChange={(e) => setEmergencyConfirmPass(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg transition-all disabled:opacity-50"
-              >
-                <Shield className="w-4 h-4" />
-                <span>{loading ? 'Verifica chiave...' : 'Ripristina Account OWNER'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('login');
-                  setError('');
-                }}
-                className="text-[11px] text-zinc-400 hover:underline font-mono block mx-auto text-center pt-1"
-              >
-                ← Torna al Login
-              </button>
-            </form>
           )}
 
         </div>

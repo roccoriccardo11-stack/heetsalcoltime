@@ -6,13 +6,19 @@ import {
   INITIAL_MESSAGES
 } from '../data/initialData';
 import { useAuth } from './AuthContext';
+import { fetchCloudKey, saveCloudKey, subscribeToCloudChanges } from '../lib/cloudSync';
 
 const DataContext = createContext();
 
-const CONTENT_KEY = 'heets_site_content_v2';
-const EVENTS_KEY = 'heets_events_v2';
-const PHOTOS_KEY = 'heets_photos_v2';
-const MESSAGES_KEY = 'heets_messages_v2';
+const CONTENT_KEY = 'content';
+const EVENTS_KEY = 'events';
+const PHOTOS_KEY = 'photos';
+const MESSAGES_KEY = 'messages';
+
+const LOCAL_CONTENT_KEY = 'heets_site_content_v2';
+const LOCAL_EVENTS_KEY = 'heets_events_v2';
+const LOCAL_PHOTOS_KEY = 'heets_photos_v2';
+const LOCAL_MESSAGES_KEY = 'heets_messages_v2';
 
 export const DataProvider = ({ children }) => {
   const { user, canManage, recordAuditAction } = useAuth();
@@ -20,10 +26,9 @@ export const DataProvider = ({ children }) => {
   // 1. Site content (Hero, about, categories, contacts)
   const [siteContent, setSiteContent] = useState(() => {
     try {
-      const saved = localStorage.getItem(CONTENT_KEY);
+      const saved = localStorage.getItem(LOCAL_CONTENT_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Ensure sponsors are removed from any old saved cache
         delete parsed.sponsors;
         return parsed;
       }
@@ -36,7 +41,7 @@ export const DataProvider = ({ children }) => {
   // 2. Events list
   const [events, setEvents] = useState(() => {
     try {
-      const saved = localStorage.getItem(EVENTS_KEY);
+      const saved = localStorage.getItem(LOCAL_EVENTS_KEY);
       return saved ? JSON.parse(saved) : INITIAL_EVENTS;
     } catch {
       return INITIAL_EVENTS;
@@ -46,7 +51,7 @@ export const DataProvider = ({ children }) => {
   // 3. Photos (approved & pending)
   const [photos, setPhotos] = useState(() => {
     try {
-      const saved = localStorage.getItem(PHOTOS_KEY);
+      const saved = localStorage.getItem(LOCAL_PHOTOS_KEY);
       return saved ? JSON.parse(saved) : INITIAL_PHOTOS;
     } catch {
       return INITIAL_PHOTOS;
@@ -56,28 +61,105 @@ export const DataProvider = ({ children }) => {
   // 4. Contact messages
   const [messages, setMessages] = useState(() => {
     try {
-      const saved = localStorage.getItem(MESSAGES_KEY);
+      const saved = localStorage.getItem(LOCAL_MESSAGES_KEY);
       return saved ? JSON.parse(saved) : INITIAL_MESSAGES;
     } catch {
       return INITIAL_MESSAGES;
     }
   });
 
-  // Auto-sync to LocalStorage
+  // 1. Initial Cloud Sync on Mount
   useEffect(() => {
-    localStorage.setItem(CONTENT_KEY, JSON.stringify(siteContent));
+    let isMounted = true;
+
+    const loadCloudData = async () => {
+      try {
+        const [cloudContent, cloudEvents, cloudPhotos, cloudMessages] = await Promise.all([
+          fetchCloudKey(CONTENT_KEY, null),
+          fetchCloudKey(EVENTS_KEY, null),
+          fetchCloudKey(PHOTOS_KEY, null),
+          fetchCloudKey(MESSAGES_KEY, null)
+        ]);
+
+        if (!isMounted) return;
+
+        if (cloudContent) {
+          delete cloudContent.sponsors;
+          setSiteContent(cloudContent);
+          localStorage.setItem(LOCAL_CONTENT_KEY, JSON.stringify(cloudContent));
+        } else {
+          // Seed cloud if empty
+          saveCloudKey(CONTENT_KEY, siteContent);
+        }
+
+        if (cloudEvents && Array.isArray(cloudEvents)) {
+          setEvents(cloudEvents);
+          localStorage.setItem(LOCAL_EVENTS_KEY, JSON.stringify(cloudEvents));
+        } else {
+          saveCloudKey(EVENTS_KEY, events);
+        }
+
+        if (cloudPhotos && Array.isArray(cloudPhotos)) {
+          setPhotos(cloudPhotos);
+          localStorage.setItem(LOCAL_PHOTOS_KEY, JSON.stringify(cloudPhotos));
+        } else {
+          saveCloudKey(PHOTOS_KEY, photos);
+        }
+
+        if (cloudMessages && Array.isArray(cloudMessages)) {
+          setMessages(cloudMessages);
+          localStorage.setItem(LOCAL_MESSAGES_KEY, JSON.stringify(cloudMessages));
+        } else {
+          saveCloudKey(MESSAGES_KEY, messages);
+        }
+      } catch (err) {
+        console.warn('[DataContext] Cloud sync error on load:', err);
+      }
+    };
+
+    loadCloudData();
+
+    // 2. Real-time Live Subscription for cross-device instant sync
+    const unsubscribe = subscribeToCloudChanges((key, value) => {
+      if (!isMounted || value === undefined || value === null) return;
+
+      if (key === CONTENT_KEY) {
+        delete value.sponsors;
+        setSiteContent(value);
+        localStorage.setItem(LOCAL_CONTENT_KEY, JSON.stringify(value));
+      } else if (key === EVENTS_KEY && Array.isArray(value)) {
+        setEvents(value);
+        localStorage.setItem(LOCAL_EVENTS_KEY, JSON.stringify(value));
+      } else if (key === PHOTOS_KEY && Array.isArray(value)) {
+        setPhotos(value);
+        localStorage.setItem(LOCAL_PHOTOS_KEY, JSON.stringify(value));
+      } else if (key === MESSAGES_KEY && Array.isArray(value)) {
+        setMessages(value);
+        localStorage.setItem(LOCAL_MESSAGES_KEY, JSON.stringify(value));
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  // Sync state to LocalStorage
+  useEffect(() => {
+    localStorage.setItem(LOCAL_CONTENT_KEY, JSON.stringify(siteContent));
   }, [siteContent]);
 
   useEffect(() => {
-    localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+    localStorage.setItem(LOCAL_EVENTS_KEY, JSON.stringify(events));
   }, [events]);
 
   useEffect(() => {
-    localStorage.setItem(PHOTOS_KEY, JSON.stringify(photos));
+    localStorage.setItem(LOCAL_PHOTOS_KEY, JSON.stringify(photos));
   }, [photos]);
 
   useEffect(() => {
-    localStorage.setItem(MESSAGES_KEY, JSON.stringify(messages));
+    localStorage.setItem(LOCAL_MESSAGES_KEY, JSON.stringify(messages));
   }, [messages]);
 
   // Security guard for administrative functions
@@ -93,14 +175,16 @@ export const DataProvider = ({ children }) => {
   // Content Actions
   const updateSiteContent = (updatedFields) => {
     assertAuthorized();
-    // Guarantee sponsors are not re-introduced
     const sanitized = { ...updatedFields };
     delete sanitized.sponsors;
 
-    setSiteContent(prev => ({
-      ...prev,
+    const newContent = {
+      ...siteContent,
       ...sanitized
-    }));
+    };
+
+    setSiteContent(newContent);
+    saveCloudKey(CONTENT_KEY, newContent);
 
     if (recordAuditAction) {
       recordAuditAction('MODIFICA_CMS', 'Testi del Sito', 'Aggiornati testi, claim o info generali dal CMS');
@@ -109,12 +193,15 @@ export const DataProvider = ({ children }) => {
 
   const updateCategoryContent = (categoryId, newFields) => {
     assertAuthorized();
-    setSiteContent(prev => ({
-      ...prev,
-      categories: prev.categories.map(cat =>
+    const newContent = {
+      ...siteContent,
+      categories: siteContent.categories.map(cat =>
         cat.id === categoryId ? { ...cat, ...newFields } : cat
       )
-    }));
+    };
+
+    setSiteContent(newContent);
+    saveCloudKey(CONTENT_KEY, newContent);
 
     if (recordAuditAction) {
       recordAuditAction('MODIFICA_CATEGORIA', categoryId, `Aggiornata categoria ${categoryId}`);
@@ -130,7 +217,9 @@ export const DataProvider = ({ children }) => {
       spotsLeft: eventData.spotsLeft || 50,
       isUpcoming: eventData.isUpcoming ?? true
     };
-    setEvents(prev => [newEvent, ...prev]);
+    const updated = [newEvent, ...events];
+    setEvents(updated);
+    saveCloudKey(EVENTS_KEY, updated);
 
     if (recordAuditAction) {
       recordAuditAction('CREA_EVENTO', newEvent.title, `Creato nuovo evento per il ${newEvent.date} a ${newEvent.location}`);
@@ -140,9 +229,9 @@ export const DataProvider = ({ children }) => {
 
   const updateEvent = (eventId, eventData) => {
     assertAuthorized();
-    setEvents(prev =>
-      prev.map(evt => (evt.id === eventId ? { ...evt, ...eventData } : evt))
-    );
+    const updated = events.map(evt => (evt.id === eventId ? { ...evt, ...eventData } : evt));
+    setEvents(updated);
+    saveCloudKey(EVENTS_KEY, updated);
 
     if (recordAuditAction) {
       recordAuditAction('MODIFICA_EVENTO', eventData.title || eventId, `Modificati dettagli evento ID ${eventId}`);
@@ -152,7 +241,9 @@ export const DataProvider = ({ children }) => {
   const deleteEvent = (eventId) => {
     assertAuthorized();
     const target = events.find(e => e.id === eventId);
-    setEvents(prev => prev.filter(evt => evt.id !== eventId));
+    const updated = events.filter(evt => evt.id !== eventId);
+    setEvents(updated);
+    saveCloudKey(EVENTS_KEY, updated);
 
     if (recordAuditAction) {
       recordAuditAction('ELIMINA_EVENTO', target?.title || eventId, `Eliminato evento ID ${eventId}`);
@@ -160,62 +251,63 @@ export const DataProvider = ({ children }) => {
   };
 
   // Photo Actions
-  // Public upload (Allowed for regular users and guests)
-  const uploadUserPhoto = ({ url, title, category, author }) => {
+  const uploadUserPhoto = (photoData) => {
     const newPhoto = {
       id: 'ph-' + Date.now(),
-      url,
-      title: title || 'Momento speciale a Pinzolo',
-      category: category || 'feste',
-      author: author || (user?.name || 'Ospite'),
+      url: photoData.url,
+      title: photoData.title || 'Momento speciale a Pinzolo',
+      category: photoData.category || 'feste',
+      author: photoData.author || (user?.name || 'Ospite'),
       uploadedAt: new Date().toISOString().split('T')[0],
-      status: 'pending', // Starts in pending moderation
+      status: 'pending',
       likes: 0
     };
-    setPhotos(prev => [newPhoto, ...prev]);
+    const updated = [newPhoto, ...photos];
+    setPhotos(updated);
+    saveCloudKey(PHOTOS_KEY, updated);
     return newPhoto;
   };
 
-  // Moderation: Approve Photo (Moderator/Owner only)
   const approvePhoto = (photoId) => {
     assertAuthorized();
     const target = photos.find(p => p.id === photoId);
-    setPhotos(prev =>
-      prev.map(p => (p.id === photoId ? { ...p, status: 'approved' } : p))
-    );
+    const updated = photos.map(p => (p.id === photoId ? { ...p, status: 'approved' } : p));
+    setPhotos(updated);
+    saveCloudKey(PHOTOS_KEY, updated);
 
     if (recordAuditAction) {
-      recordAuditAction('APPROVA_FOTO', target?.title || photoId, `Approvata e pubblicata foto di ${target?.author || 'utente'}`);
+      recordAuditAction('APPROVA_FOTO', target?.title || photoId, `Approvata foto di ${target?.author || 'utente'}`);
     }
   };
 
-  // Moderation: Reject Photo (Moderator/Owner only)
   const rejectPhoto = (photoId) => {
     assertAuthorized();
     const target = photos.find(p => p.id === photoId);
-    setPhotos(prev => prev.filter(p => p.id !== photoId));
+    const updated = photos.filter(p => p.id !== photoId);
+    setPhotos(updated);
+    saveCloudKey(PHOTOS_KEY, updated);
 
     if (recordAuditAction) {
-      recordAuditAction('RIFIUTA_FOTO', target?.title || photoId, `Rifiutata ed eliminata foto di ${target?.author || 'utente'}`);
+      recordAuditAction('RIFIUTA_FOTO', target?.title || photoId, `Rifiutata foto di ${target?.author || 'utente'}`);
     }
   };
 
-  // Moderation: Delete Photo from live gallery (Moderator/Owner only)
   const deletePhoto = (photoId) => {
     assertAuthorized();
     const target = photos.find(p => p.id === photoId);
-    setPhotos(prev => prev.filter(p => p.id !== photoId));
+    const updated = photos.filter(p => p.id !== photoId);
+    setPhotos(updated);
+    saveCloudKey(PHOTOS_KEY, updated);
 
     if (recordAuditAction) {
-      recordAuditAction('ELIMINA_FOTO_GALLERY', target?.title || photoId, `Rimossa foto dalla gallery pubblica`);
+      recordAuditAction('ELIMINA_FOTO_GALLERY', target?.title || photoId, `Rimossa foto dalla gallery`);
     }
   };
 
-  // Public Like
   const likePhoto = (photoId) => {
-    setPhotos(prev =>
-      prev.map(p => (p.id === photoId ? { ...p, likes: (p.likes || 0) + 1 } : p))
-    );
+    const updated = photos.map(p => (p.id === photoId ? { ...p, likes: (p.likes || 0) + 1 } : p));
+    setPhotos(updated);
+    saveCloudKey(PHOTOS_KEY, updated);
   };
 
   // Message Actions
@@ -226,43 +318,47 @@ export const DataProvider = ({ children }) => {
       createdAt: new Date().toISOString(),
       read: false
     };
-    setMessages(prev => [newMsg, ...prev]);
+    const updated = [newMsg, ...messages];
+    setMessages(updated);
+    saveCloudKey(MESSAGES_KEY, updated);
     return newMsg;
   };
 
   const markMessageAsRead = (msgId) => {
     assertAuthorized();
-    setMessages(prev =>
-      prev.map(m => (m.id === msgId ? { ...m, read: true } : m))
-    );
+    const updated = messages.map(m => (m.id === msgId ? { ...m, read: true } : m));
+    setMessages(updated);
+    saveCloudKey(MESSAGES_KEY, updated);
   };
 
   const deleteMessage = (msgId) => {
     assertAuthorized();
-    setMessages(prev => prev.filter(m => m.id !== msgId));
+    const updated = messages.filter(m => m.id !== msgId);
+    setMessages(updated);
+    saveCloudKey(MESSAGES_KEY, updated);
+
     if (recordAuditAction) {
       recordAuditAction('ELIMINA_MESSAGGIO', msgId, `Eliminato messaggio ID ${msgId}`);
     }
   };
 
-  // Reset to initial defaults (Owner only)
+  // Reset to initial defaults
   const resetToDefaults = () => {
     assertAuthorized();
     setSiteContent(INITIAL_SITE_CONTENT);
     setEvents(INITIAL_EVENTS);
     setPhotos(INITIAL_PHOTOS);
     setMessages(INITIAL_MESSAGES);
-    localStorage.removeItem(CONTENT_KEY);
-    localStorage.removeItem(EVENTS_KEY);
-    localStorage.removeItem(PHOTOS_KEY);
-    localStorage.removeItem(MESSAGES_KEY);
+    saveCloudKey(CONTENT_KEY, INITIAL_SITE_CONTENT);
+    saveCloudKey(EVENTS_KEY, INITIAL_EVENTS);
+    saveCloudKey(PHOTOS_KEY, INITIAL_PHOTOS);
+    saveCloudKey(MESSAGES_KEY, INITIAL_MESSAGES);
 
     if (recordAuditAction) {
       recordAuditAction('RESET_DEFAULT', 'Tutto il Database', 'Ripristinati dati e contenuti predefiniti');
     }
   };
 
-  // Filtered views
   const approvedPhotos = photos.filter(p => p.status === 'approved');
   const pendingPhotos = photos.filter(p => p.status === 'pending');
   const upcomingEvents = events.filter(e => e.isUpcoming !== false);
