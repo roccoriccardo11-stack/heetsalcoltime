@@ -48,9 +48,9 @@ export const ModeratorsManager = ({ onShowToast }) => {
 
   const [activeSubTab, setActiveSubTab] = useState('emit'); // 'emit' | 'moderators' | 'audit' | 'settings'
 
-  const handleCreateInvite = (e) => {
+  const handleCreateInvite = async (e) => {
     e.preventDefault();
-    const res = createModeratorInvite(inviteEmail, inviteNote);
+    const res = await createModeratorInvite(inviteEmail, inviteNote);
     if (res.success) {
       setLastGeneratedInvite(res);
       setInviteEmail('');
@@ -60,7 +60,7 @@ export const ModeratorsManager = ({ onShowToast }) => {
       }
     } else {
       if (onShowToast) {
-        onShowToast(res.error, 'error');
+        onShowToast(res.error || 'Errore nella generazione del codice invito.', 'error');
       }
     }
   };
@@ -126,7 +126,7 @@ export const ModeratorsManager = ({ onShowToast }) => {
     }
   };
 
-  const pendingInvites = invitesList.filter(i => i.status === 'pending' && new Date(i.expiresAt) > new Date());
+  const pendingInvites = invitesList.filter(i => i.status === 'pending' && new Date(i.expires_at) > new Date());
 
   return (
     <div className="space-y-8">
@@ -339,7 +339,7 @@ export const ModeratorsManager = ({ onShowToast }) => {
 
                       <div className="pt-2 border-t border-cyan-500/10 flex items-center justify-between">
                         <span className="text-[10px] font-mono text-zinc-400">
-                          Scade: {new Date(inv.expiresAt).toLocaleDateString('it-IT')}
+                          Scade: {new Date(inv.expires_at).toLocaleDateString('it-IT')}
                         </span>
 
                         <div className="flex items-center gap-1.5">
@@ -348,7 +348,14 @@ export const ModeratorsManager = ({ onShowToast }) => {
                             className="px-2.5 py-1 rounded-lg bg-alpine-950 hover:bg-cyan-950/50 text-cyan-300 border border-cyan-500/30 text-xs font-mono"
                             title="Copia codice"
                           >
-                            Copia
+                            Codice
+                          </button>
+                          <button
+                            onClick={() => copyText(inviteUrl, 'link')}
+                            className="px-2.5 py-1 rounded-lg bg-alpine-950 hover:bg-cyan-950/50 text-sky-300 border border-sky-500/30 text-xs font-mono"
+                            title="Copia link completo"
+                          >
+                            Link
                           </button>
                           <button
                             onClick={() => handleRevokeInvite(inv.id, inv.token)}

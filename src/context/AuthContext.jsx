@@ -544,29 +544,20 @@ export const AuthProvider = ({ children }) => {
 
     const cleanToken = rawToken.trim().toUpperCase();
     try {
-      const { data: invite, error } = await supabase
-        .from('moderator_invites')
-        .select('*')
-        .eq('token', cleanToken)
-        .maybeSingle();
+      // Use RPC to bypass RLS — the function runs as SECURITY DEFINER
+      const { data, error } = await supabase.rpc('verify_invite_token', {
+        p_token: cleanToken
+      });
 
-      if (error || !invite) {
-        return { valid: false, error: 'Codice invito non valido o inesistente.' };
+      if (error) {
+        return { valid: false, error: error.message || 'Errore durante la verifica del codice.' };
       }
 
-      if (invite.status === 'used') {
-        return { valid: false, error: 'Questo codice invito è già stato utilizzato.' };
+      if (!data || !data.valid) {
+        return { valid: false, error: data?.error || 'Codice invito non valido o inesistente.' };
       }
 
-      if (invite.status === 'revoked') {
-        return { valid: false, error: 'Questo codice invito è stato revocato dall\'Owner.' };
-      }
-
-      if (new Date(invite.expires_at) < new Date()) {
-        return { valid: false, error: 'Questo codice invito è scaduto. Richiedine uno nuovo all\'Owner.' };
-      }
-
-      return { valid: true, invite };
+      return { valid: true, invite: data.invite };
     } catch (err) {
       return { valid: false, error: 'Errore durante la verifica del codice.' };
     }

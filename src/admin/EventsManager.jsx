@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Edit2, Trash2, Check, X } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { ImageUploader } from '../components/ImageUploader';
 
 export const EventsManager = ({ onShowToast }) => {
   const { events, addEvent, updateEvent, deleteEvent, siteContent } = useData();
@@ -231,16 +232,13 @@ export const EventsManager = ({ onShowToast }) => {
               </div>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-mono text-zinc-400 mb-1">URL Immagine Locandina</label>
-              <input
-                type="url"
-                value={image}
-                onChange={(e) => setImage(e.target.value)}
-                placeholder="https://images.unsplash.com/..."
-                className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none font-mono"
-              />
-            </div>
+            <ImageUploader
+              currentImageUrl={image}
+              onImageUploaded={(url) => setImage(url)}
+              onError={(err) => {
+                if (onShowToast) onShowToast(err, 'error');
+              }}
+            />
 
             <div>
               <label className="block text-[11px] font-mono text-zinc-400 mb-1">Breve Descrizione Anteprima</label>
