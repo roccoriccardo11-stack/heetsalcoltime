@@ -698,4 +698,54 @@ create policy "Auth delete event images"
     and public.is_admin_or_moderator()
   );
 
+-- ==============================================================================
+-- STORAGE CONFIGURATION (event-videos)
+-- ==============================================================================
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'event-videos',
+  'event-videos',
+  true,
+  52428800,  -- 50 MB
+  array['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v', 'video/3gpp', 'video/ogg']
+)
+on conflict (id) do update set
+  public = true,
+  file_size_limit = 52428800,
+  allowed_mime_types = array['video/mp4', 'video/quicktime', 'video/webm', 'video/x-m4v', 'video/3gpp', 'video/ogg'];
+
+drop policy if exists "Public read event videos" on storage.objects;
+drop policy if exists "Auth upload event videos" on storage.objects;
+drop policy if exists "Auth update event videos" on storage.objects;
+drop policy if exists "Auth delete event videos" on storage.objects;
+
+create policy "Public read event videos"
+  on storage.objects for select
+  using (bucket_id = 'event-videos');
+
+create policy "Auth upload event videos"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'event-videos'
+    and public.is_admin_or_moderator()
+  );
+
+create policy "Auth update event videos"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'event-videos'
+    and public.is_admin_or_moderator()
+  );
+
+create policy "Auth delete event videos"
+  on storage.objects for delete
+  to authenticated
+  using (
+    bucket_id = 'event-videos'
+    and public.is_admin_or_moderator()
+  );
+
+
 

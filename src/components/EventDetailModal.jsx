@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Calendar, Clock, MapPin, Send, CheckCircle2, MessageCircle, Sparkles } from 'lucide-react';
+import { X, Calendar, Clock, MapPin, Send, CheckCircle2, MessageCircle, Sparkles, Film, Play } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 export const EventDetailModal = ({ event, onClose, onShowToast }) => {
@@ -45,12 +45,25 @@ export const EventDetailModal = ({ event, onClose, onShowToast }) => {
       <div className="relative w-full max-w-3xl bg-alpine-900 border border-cyan-500/25 rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
         
         {/* Cover Header */}
-        <div className="relative h-60 sm:h-72 w-full flex-shrink-0">
-          <img
-            src={event.image}
-            alt={event.title}
-            className="w-full h-full object-cover filter brightness-[0.45] contrast-110"
-          />
+        <div className="relative h-60 sm:h-72 w-full flex-shrink-0 bg-alpine-950">
+          {event.image ? (
+            <img
+              src={event.image}
+              alt={event.title}
+              className="w-full h-full object-cover filter brightness-[0.45] contrast-110"
+            />
+          ) : event.video ? (
+            <video
+              src={event.video}
+              muted
+              autoPlay
+              loop
+              playsInline
+              className="w-full h-full object-cover filter brightness-[0.4]"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-alpine-900 to-black" />
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-alpine-900 via-alpine-900/40 to-transparent"></div>
           
           <button
@@ -62,9 +75,17 @@ export const EventDetailModal = ({ event, onClose, onShowToast }) => {
           </button>
 
           <div className="absolute bottom-6 left-6 right-6 z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold uppercase mb-2">
-              <Sparkles className="w-3.5 h-3.5 fill-cyan-400 text-cyan-400" />
-              {event.badge || "EVENTO SPECIALE"}
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold uppercase">
+                <Sparkles className="w-3.5 h-3.5 fill-cyan-400 text-cyan-400" />
+                {event.badge || "EVENTO SPECIALE"}
+              </div>
+              {event.video && (
+                <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-sky-500/20 border border-sky-400/40 text-sky-300 text-xs font-mono font-bold uppercase">
+                  <Film className="w-3.5 h-3.5 text-sky-400" />
+                  <span>CON VIDEO</span>
+                </div>
+              )}
             </div>
             <h2 className="font-display font-black text-2xl sm:text-3xl text-white uppercase tracking-tight">
               {event.title}
@@ -101,6 +122,29 @@ export const EventDetailModal = ({ event, onClose, onShowToast }) => {
               </div>
             </div>
           </div>
+
+          {/* Dedicated Video Player (if video is present) */}
+          {event.video && (
+            <div className="glass-panel p-4 sm:p-5 rounded-2xl border border-sky-500/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-mono font-bold text-sky-300 uppercase tracking-wider flex items-center gap-2">
+                  <Film className="w-4 h-4 text-sky-400" />
+                  <span>Video Ufficiale Evento</span>
+                </h4>
+                <span className="text-[10px] font-mono text-zinc-400">Qualità Originale</span>
+              </div>
+              <div className="rounded-xl overflow-hidden bg-black border border-sky-500/20 shadow-xl">
+                <video
+                  src={event.video}
+                  poster={event.image || undefined}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="w-full max-h-80 sm:max-h-96 object-contain bg-black"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Description */}
           <div className="glass-panel p-5 rounded-2xl border border-cyan-500/15 space-y-2">

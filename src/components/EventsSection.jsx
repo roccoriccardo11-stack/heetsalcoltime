@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Clock, MapPin, ArrowRight, Sparkles, History, Ticket } from 'lucide-react';
+import { Calendar, Clock, MapPin, ArrowRight, Sparkles, History, Ticket, Film, Play } from 'lucide-react';
 import { useData } from '../context/DataContext';
 
 export const EventsSection = ({ onSelectEvent }) => {
@@ -21,41 +21,42 @@ export const EventsSection = ({ onSelectEvent }) => {
   };
 
   return (
-    <section id="eventi" className="relative py-24 bg-alpine-950 overflow-hidden">
-      {/* Glow */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+    <section id="eventi" className="py-24 relative bg-alpine-950">
+      
+      {/* Background glow effects */}
+      <div className="absolute top-1/4 left-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-blue-600/5 rounded-full blur-3xl pointer-events-none"></div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         {/* Section Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
-          <div>
-            <div className="inline-flex items-center gap-2 text-xs font-mono font-bold tracking-[0.25em] text-cyan-400 uppercase mb-2">
-              <span className="w-6 h-[1.5px] bg-cyan-400"></span>
-              CALENDARIO EVENTI
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-mono font-bold uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Calendario Ufficiale</span>
             </div>
-            <h2 className="font-display font-black text-3xl sm:text-4xl md:text-5xl text-white uppercase tracking-tight">
-              PROSSIME FESTE & SERATE
+            <h2 className="font-display font-black text-3xl sm:text-4xl lg:text-5xl text-white uppercase tracking-tight">
+              I NOSTRI EVENTI
             </h2>
-            <p className="mt-2 text-sm sm:text-base text-zinc-400 max-w-xl">
-              Non perdere i nostri raduni esclusivi tra baite in quota, après-ski e serate private a Pinzolo e Campiglio.
+            <p className="text-zinc-400 text-sm sm:text-base max-w-xl">
+              Dalle serate après-ski nei rifugi più esclusivi alle notti nei migliori club di Pinzolo & Madonna di Campiglio.
             </p>
           </div>
 
-          {/* Tab Selector */}
-          <div className="inline-flex p-1 rounded-2xl bg-alpine-900/80 border border-cyan-500/20 backdrop-blur-md self-start md:self-auto">
+          {/* Toggle Tabs */}
+          <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-alpine-900 border border-cyan-500/20 self-start md:self-auto">
             <button
               onClick={() => setActiveTab('upcoming')}
               className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
                 activeTab === 'upcoming'
-                  ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-600 text-black shadow-glow-cyan font-extrabold'
+                  ? 'bg-cyan-400 text-black font-extrabold shadow-glow-cyan'
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>In Programma ({upcomingEvents.length})</span>
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Prossimi Eventi ({upcomingEvents.length})</span>
             </button>
-
             <button
               onClick={() => setActiveTab('past')}
               className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
@@ -82,13 +83,34 @@ export const EventsSection = ({ onSelectEvent }) => {
                   onClick={() => onSelectEvent(event)}
                   className="group relative rounded-3xl overflow-hidden cursor-pointer bg-alpine-900 border border-cyan-500/20 hover:border-cyan-400/60 transition-all duration-300 shadow-card hover:shadow-glow-cyan flex flex-col justify-between"
                 >
-                  {/* Poster Image */}
+                  {/* Poster Image or Video Thumbnail */}
                   <div className="relative h-48 w-full overflow-hidden bg-alpine-800">
-                    <img
-                      src={event.image}
-                      alt={event.title}
-                      className="w-full h-full object-cover filter brightness-[0.55] group-hover:scale-105 group-hover:brightness-[0.75] transition-all duration-500"
-                    />
+                    {event.image ? (
+                      <img
+                        src={event.image}
+                        alt={event.title}
+                        className="w-full h-full object-cover filter brightness-[0.55] group-hover:scale-105 group-hover:brightness-[0.75] transition-all duration-500"
+                      />
+                    ) : event.video ? (
+                      <div className="w-full h-full bg-sky-950/60 flex items-center justify-center relative">
+                        <video
+                          src={event.video}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          className="w-full h-full object-cover filter brightness-[0.5]"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-12 h-12 rounded-full bg-sky-400/80 backdrop-blur-sm flex items-center justify-center text-black shadow-glow-cyan">
+                            <Play className="w-5 h-5 fill-black ml-0.5" />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-full h-full bg-alpine-900 flex items-center justify-center text-zinc-600">
+                        <Film className="w-12 h-12" />
+                      </div>
+                    )}
                     <div className="absolute inset-0 bg-gradient-to-t from-alpine-900 via-transparent to-transparent"></div>
 
                     {/* Date Badge */}
@@ -101,11 +123,17 @@ export const EventsSection = ({ onSelectEvent }) => {
                       </span>
                     </div>
 
-                    {/* Status / Category Tag */}
+                    {/* Status / Category Tag & Video Badge */}
                     <div className="absolute top-4 right-4 flex flex-col items-end gap-1.5">
                       <span className="px-3 py-1 rounded-full bg-alpine-950/90 backdrop-blur-md border border-cyan-500/20 text-[10px] font-mono font-bold uppercase tracking-wider text-cyan-200">
                         {event.category.toUpperCase()}
                       </span>
+                      {event.video && (
+                        <span className="px-2.5 py-0.5 rounded-full bg-sky-500/30 backdrop-blur-md border border-sky-400/50 text-[9px] font-mono font-bold uppercase tracking-wider text-sky-200 flex items-center gap-1">
+                          <Play className="w-2.5 h-2.5 fill-sky-200" />
+                          VIDEO
+                        </span>
+                      )}
                       {event.badge && (
                         <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-500/40 text-[9px] font-mono font-bold uppercase tracking-wider text-cyan-300">
                           {event.badge}

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Plus, Edit2, Trash2, Check, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, X, Video, Film } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { ImageUploader } from '../components/ImageUploader';
+import { VideoUploader } from '../components/VideoUploader';
 
 export const EventsManager = ({ onShowToast }) => {
   const { events, addEvent, updateEvent, deleteEvent, siteContent } = useData();
@@ -17,6 +18,7 @@ export const EventsManager = ({ onShowToast }) => {
   const [shortDesc, setShortDesc] = useState('');
   const [description, setDescription] = useState('');
   const [image, setImage] = useState('');
+  const [video, setVideo] = useState('');
   const [badge, setBadge] = useState('EVENTO ESCLUSIVO');
   const [spotsLeft, setSpotsLeft] = useState(30);
   const [isUpcoming, setIsUpcoming] = useState(true);
@@ -32,6 +34,7 @@ export const EventsManager = ({ onShowToast }) => {
     setShortDesc('');
     setDescription('');
     setImage('');
+    setVideo('');
     setBadge('EVENTO ESCLUSIVO');
     setSpotsLeft(30);
     setIsUpcoming(true);
@@ -40,6 +43,7 @@ export const EventsManager = ({ onShowToast }) => {
   const handleStartCreate = () => {
     resetForm();
     setImage('https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80');
+    setVideo('');
     setIsEditing(true);
   };
 
@@ -52,7 +56,8 @@ export const EventsManager = ({ onShowToast }) => {
     setLocation(evt.location);
     setShortDesc(evt.shortDesc || '');
     setDescription(evt.description || '');
-    setImage(evt.image);
+    setImage(evt.image || '');
+    setVideo(evt.video || evt.video_url || '');
     setBadge(evt.badge || '');
     setSpotsLeft(evt.spotsLeft ?? 30);
     setIsUpcoming(evt.isUpcoming !== false);
@@ -71,7 +76,8 @@ export const EventsManager = ({ onShowToast }) => {
       location,
       shortDesc: shortDesc || 'Serata imperdibile organizzata da Heets Alcol Time',
       description: description || shortDesc || 'Dettagli in arrivo per questa serata speciale.',
-      image: image || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80',
+      image: image || (video ? '' : 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80'),
+      video: video || '',
       badge,
       spotsLeft: Number(spotsLeft) || 0,
       isUpcoming
@@ -104,7 +110,7 @@ export const EventsManager = ({ onShowToast }) => {
           <h3 className="font-display font-bold text-lg text-white uppercase tracking-tight">
             TUTTI GLI EVENTI ({events.length})
           </h3>
-          <p className="text-xs text-zinc-400">Aggiungi, modifica le info, gestisci liste e archivio storico</p>
+          <p className="text-xs text-zinc-400">Aggiungi, modifica foto e video, gestisci liste e archivio storico</p>
         </div>
 
         {!isEditing && (
@@ -232,13 +238,38 @@ export const EventsManager = ({ onShowToast }) => {
               </div>
             </div>
 
-            <ImageUploader
-              currentImageUrl={image}
-              onImageUploaded={(url) => setImage(url)}
-              onError={(err) => {
-                if (onShowToast) onShowToast(err, 'error');
-              }}
-            />
+            {/* Media Section: Photo & Video Upload */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-alpine-950/70 border border-cyan-500/20 space-y-4">
+              <div className="flex items-center justify-between border-b border-cyan-500/10 pb-2">
+                <span className="text-xs font-mono font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-2">
+                  <Film className="w-4 h-4 text-cyan-400" />
+                  Media Evento (Foto e/o Video)
+                </span>
+                <span className="text-[10px] font-mono text-zinc-400">
+                  Puoi caricare solo foto, solo video o entrambi
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <ImageUploader
+                  currentImageUrl={image}
+                  onImageUploaded={(url) => setImage(url)}
+                  onImageRemoved={() => setImage('')}
+                  onError={(err) => {
+                    if (onShowToast) onShowToast(err, 'error');
+                  }}
+                />
+
+                <VideoUploader
+                  currentVideoUrl={video}
+                  onVideoUploaded={(url) => setVideo(url)}
+                  onVideoRemoved={() => setVideo('')}
+                  onError={(err) => {
+                    if (onShowToast) onShowToast(err, 'error');
+                  }}
+                />
+              </div>
+            </div>
 
             <div>
               <label className="block text-[11px] font-mono text-zinc-400 mb-1">Breve Descrizione Anteprima</label>
@@ -290,16 +321,33 @@ export const EventsManager = ({ onShowToast }) => {
             className="glass-card p-4 sm:p-5 rounded-2xl border border-cyan-500/15 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
           >
             <div className="flex items-center gap-4">
-              <img
-                src={evt.image}
-                alt={evt.title}
-                className="w-16 h-16 rounded-xl object-cover border border-cyan-500/20 flex-shrink-0"
-              />
+              {evt.image ? (
+                <img
+                  src={evt.image}
+                  alt={evt.title}
+                  className="w-16 h-16 rounded-xl object-cover border border-cyan-500/20 flex-shrink-0"
+                />
+              ) : evt.video ? (
+                <div className="w-16 h-16 rounded-xl bg-sky-950/80 border border-sky-500/30 flex flex-col items-center justify-center text-sky-400 flex-shrink-0">
+                  <Film className="w-6 h-6" />
+                  <span className="text-[8px] font-mono font-bold mt-1">VIDEO</span>
+                </div>
+              ) : (
+                <div className="w-16 h-16 rounded-xl bg-alpine-900 border border-cyan-500/20 flex items-center justify-center text-zinc-500 flex-shrink-0">
+                  <Film className="w-6 h-6" />
+                </div>
+              )}
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-mono font-bold uppercase border border-cyan-500/30">
                     {evt.category}
                   </span>
+                  {evt.video && (
+                    <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[10px] font-mono font-bold uppercase border border-sky-500/40 flex items-center gap-1">
+                      <Film className="w-3 h-3" />
+                      VIDEO
+                    </span>
+                  )}
                   <span className="text-xs font-mono text-zinc-400">{evt.date}</span>
                   {evt.isUpcoming ? (
                     <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold">
