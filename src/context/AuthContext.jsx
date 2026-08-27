@@ -232,6 +232,9 @@ export const AuthProvider = ({ children }) => {
 
     try {
       // 2. Register via Supabase Authentication
+      let currentSession = null;
+      let currentUser = null;
+
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: cleanEmail,
         password: cleanPass,
@@ -241,25 +244,64 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (authError) {
-        if (authError.message.includes('already registered')) {
+        const errorMsg = (authError.message || '').toLowerCase();
+        // If user already exists in auth.users, perform login
+        if (errorMsg.includes('already') || errorMsg.includes('registered') || errorMsg.includes('exists')) {
           const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
             email: cleanEmail,
             password: cleanPass
           });
           if (signInErr) {
-            return { success: false, error: 'Questa email è già registrata. Effettua il login.' };
+            return {
+              success: false,
+              error: 'Questa email è già registrata in Supabase Auth. Verifica la password inserita o effettua il login.'
+            };
           }
-          authData.user = signInData.user;
+          currentSession = signInData.session;
+          currentUser = signInData.user;
         } else {
           return { success: false, error: authError.message };
         }
+      } else {
+        // If Supabase returned empty identities (user already registered in email-confirmation mode)
+        if (authData?.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0) {
+          const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: cleanPass
+          });
+          if (signInErr) {
+            return {
+              success: false,
+              error: 'Questa email è già registrata in Supabase Auth. Inserisci la password corretta per accedere.'
+            };
+          }
+          currentSession = signInData.session;
+          currentUser = signInData.user;
+        } else {
+          currentSession = authData?.session || null;
+          currentUser = authData?.user || null;
+        }
       }
 
-      if (!authData?.user) {
-        return { success: false, error: 'Impossibile creare account utente in Supabase Auth.' };
+      // 3. Verify session explicitly
+      if (!currentSession) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        currentSession = sessionData?.session || null;
+        if (sessionData?.session?.user) {
+          currentUser = sessionData.session.user;
+        }
       }
 
-      // 3. Promote to 'owner' via secure atomic database RPC (uses auth.uid() automatically)
+      // 4. If no session is available (e.g. Supabase requires email verification)
+      if (!currentSession || !currentUser) {
+        return {
+          success: false,
+          requiresVerification: true,
+          error: `Registrazione completata! Per motivi di sicurezza Supabase richiede la verifica dell'email: controlla la tua casella di posta (${cleanEmail}), clicca sul link di conferma e poi effettua il login per attivare l'account OWNER.`
+        };
+      }
+
+      // 5. Promote to 'owner' via secure atomic database RPC (uses auth.uid() from verified session)
       const { error: rpcError } = await supabase.rpc('setup_initial_owner', {
         p_name: cleanName
       });
@@ -268,9 +310,10 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: rpcError.message };
       }
 
-      // 4. Update session profile state
-      const ownerProfile = {
-        id: authData.user.id,
+      // 6. Fetch and update session profile state
+      const dbProfile = await fetchUserProfile(currentUser.id, currentUser.email || cleanEmail);
+      const ownerProfile = dbProfile || {
+        id: currentUser.id,
         email: cleanEmail,
         name: cleanName,
         role: 'owner',
@@ -282,6 +325,7 @@ export const AuthProvider = ({ children }) => {
       setUser(ownerProfile);
       setHasOwner(true);
       await loadOwnerData('owner');
+      recordAuditAction('INITIAL_OWNER_SETUP', cleanEmail, 'Primo account OWNER configurato con successo.');
 
       return { success: true, user: ownerProfile };
     } catch (err) {
@@ -321,7 +365,20 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: 'Nessun utente trovato.' };
       }
 
-      const profile = await fetchUserProfile(authData.user.id, authData.user.email);
+      // Se non esiste ancora un Owner nel database (es. l'utente si era registrato e ha appena confermato l'email),
+      // promuovi automaticamente questo primo utente autenticato a Owner tramite setup_initial_owner
+      const isOwnerRegistered = await checkOwnerStatus();
+      if (!isOwnerRegistered) {
+        const ownerName = authData.user.user_metadata?.name || 'Owner';
+        const { error: rpcErr } = await supabase.rpc('setup_initial_owner', {
+          p_name: ownerName
+        });
+        if (!rpcErr) {
+          setHasOwner(true);
+        }
+      }
+
+      let profile = await fetchUserProfile(authData.user.id, authData.user.email);
       if (!profile) {
         return { success: false, error: 'Profilo utente non trovato nel database.' };
       }

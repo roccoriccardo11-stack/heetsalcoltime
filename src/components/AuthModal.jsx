@@ -166,6 +166,9 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
       }
       onClose();
     } else {
+      if (res.requiresVerification && onShowToast) {
+        onShowToast('Verifica la tua email prima di effettuare il login.', 'info');
+      }
       setError(res.error || 'Errore durante la configurazione iniziale dell\'Owner.');
     }
   };
