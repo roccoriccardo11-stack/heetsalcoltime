@@ -476,7 +476,37 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_auth_user();
 
 -- ==============================================================================
--- ROW LEVEL SECURITY (RLS) SICURE E RIGIDE
+-- HELPER FUNCTIONS SECURITY DEFINER PER RLS (Evitano ricorsione infinita)
+-- ==============================================================================
+
+create or replace function public.is_owner()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'owner' and is_active = true
+  );
+$$;
+
+create or replace function public.is_admin_or_moderator()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role in ('owner', 'moderator') and is_active = true
+  );
+$$;
+
+-- ==============================================================================
+-- ROW LEVEL SECURITY (RLS) SICURE, RIGIDE E SENZA RICORSIONE
 -- ==============================================================================
 
 alter table public.profiles enable row level security;
@@ -484,33 +514,43 @@ alter table public.moderator_invites enable row level security;
 alter table public.audit_logs enable row level security;
 alter table public.app_state enable row level security;
 
--- PROFILES
+-- PROFILES:
+-- 1. Ogni utente può SEMPRE leggere il proprio profilo (senza ricorsione)
 drop policy if exists "Users can read profiles" on public.profiles;
-create policy "Users can read profiles"
+drop policy if exists "Users can view own profile" on public.profiles;
+create policy "Users can view own profile"
   on public.profiles for select
-  using (
-    auth.uid() = id
-    or exists (select 1 from public.profiles p where p.id = auth.uid() and p.role in ('owner', 'moderator'))
-  );
+  to authenticated
+  using (auth.uid() = id);
 
--- MODERATOR_INVITES (Solo Owner può leggere e interagire)
+-- 2. Owner e Moderatori attivi possono leggere tutti i profili
+drop policy if exists "Admins can view all profiles" on public.profiles;
+create policy "Admins can view all profiles"
+  on public.profiles for select
+  to authenticated
+  using (public.is_admin_or_moderator());
+
+-- MODERATOR_INVITES (Solo Owner può leggere e gestire inviti)
 drop policy if exists "Only Owner can access moderator_invites" on public.moderator_invites;
 create policy "Only Owner can access moderator_invites"
   on public.moderator_invites for all
-  using (
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'owner' and is_active = true)
-  )
-  with check (
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'owner' and is_active = true)
-  );
+  to authenticated
+  using (public.is_owner())
+  with check (public.is_owner());
 
--- AUDIT_LOGS (Lettura per Owner/Moderator, scrittura tramite RPC/trigger, no update/delete)
+-- AUDIT_LOGS (Lettura per Owner/Moderator, scrittura per utenti autenticati)
 drop policy if exists "Audit logs read for Owner and Moderator" on public.audit_logs;
+drop policy if exists "Audit logs insert for authenticated" on public.audit_logs;
+
 create policy "Audit logs read for Owner and Moderator"
   on public.audit_logs for select
-  using (
-    exists (select 1 from public.profiles where id = auth.uid() and role in ('owner', 'moderator'))
-  );
+  to authenticated
+  using (public.is_admin_or_moderator());
+
+create policy "Audit logs insert for authenticated"
+  on public.audit_logs for insert
+  to authenticated
+  with check (auth.uid() = actor_id);
 
 -- APP_STATE (Lettura pubblica, modifica SOLO Owner e Moderator attivi)
 drop policy if exists "Anyone can read app_state" on public.app_state;
@@ -521,15 +561,41 @@ create policy "Anyone can read app_state"
 drop policy if exists "Only Owner/Moderator can modify app_state" on public.app_state;
 create policy "Only Owner/Moderator can modify app_state"
   on public.app_state for all
-  using (
-    exists (select 1 from public.profiles where id = auth.uid() and role in ('owner', 'moderator') and is_active = true)
-  )
-  with check (
-    exists (select 1 from public.profiles where id = auth.uid() and role in ('owner', 'moderator') and is_active = true)
-  );
+  to authenticated
+  using (public.is_admin_or_moderator())
+  with check (public.is_admin_or_moderator());
 
--- Pubblicazione Realtime
+-- ==============================================================================
+-- AUTO-RIPARAZIONE & SINCRONIZZAZIONE PROFILI ESISTENTI (Non distruttiva)
+-- ==============================================================================
+-- Assicura che qualsiasi utente presente in auth.users abbia una riga corrispondente in public.profiles
+insert into public.profiles (id, email, name, role, avatar, is_active, created_at, updated_at)
+select 
+  u.id,
+  lower(trim(u.email)),
+  coalesce(u.raw_user_meta_data->>'name', split_part(u.email, '@', 1), 'Utente'),
+  'user',
+  '⛷️',
+  true,
+  coalesce(u.created_at, now()),
+  now()
+from auth.users u
+left join public.profiles p on p.id = u.id
+where p.id is null
+on conflict (id) do nothing;
+
+-- ==============================================================================
+-- PUBBLICAZIONE REALTIME
+-- ==============================================================================
+do $$
+begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
+end $$;
+
 alter publication supabase_realtime add table public.profiles;
 alter publication supabase_realtime add table public.moderator_invites;
 alter publication supabase_realtime add table public.audit_logs;
 alter publication supabase_realtime add table public.app_state;
+
