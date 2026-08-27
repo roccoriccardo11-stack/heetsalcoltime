@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Save, RefreshCw } from 'lucide-react';
 import { useData } from '../context/DataContext';
+import { CategoryImageUploader } from '../components/CategoryImageUploader';
 
 export const ContentEditor = ({ onShowToast }) => {
   const { siteContent, updateSiteContent, resetToDefaults } = useData();
@@ -236,25 +237,25 @@ export const ContentEditor = ({ onShowToast }) => {
                   <span className="text-[10px] font-mono text-zinc-400">{cat.badge}</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-mono text-zinc-400 mb-1">Titolo Categoria</label>
-                    <input
-                      type="text"
-                      value={cat.title}
-                      onChange={(e) => handleCategoryChange(idx, 'title', e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-alpine-950 border border-cyan-500/20 text-xs text-white focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-mono text-zinc-400 mb-1">URL Immagine di Copertina</label>
-                    <input
-                      type="url"
-                      value={cat.coverImage}
-                      onChange={(e) => handleCategoryChange(idx, 'coverImage', e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-alpine-950 border border-cyan-500/20 text-xs text-white font-mono focus:outline-none"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-[10px] font-mono text-zinc-400 mb-1">Titolo Categoria</label>
+                  <input
+                    type="text"
+                    value={cat.title}
+                    onChange={(e) => handleCategoryChange(idx, 'title', e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-alpine-950 border border-cyan-500/20 text-xs text-white focus:outline-none"
+                  />
+                </div>
+
+                <div className="p-4 rounded-2xl bg-alpine-950/70 border border-cyan-500/15">
+                  <CategoryImageUploader
+                    currentImageUrl={cat.coverImage}
+                    onImageChange={(newUrl) => handleCategoryChange(idx, 'coverImage', newUrl)}
+                    onError={(err) => {
+                      if (onShowToast) onShowToast(err, 'error');
+                    }}
+                    label="Copertina Categoria (Carica File o URL)"
+                  />
                 </div>
 
                 <div>
