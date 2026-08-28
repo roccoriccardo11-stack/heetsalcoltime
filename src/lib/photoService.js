@@ -1,40 +1,49 @@
 /**
  * Photo Service — Heets Alcol Time
  *
- * Gestisce tutte le operazioni CRUD sulle foto tramite la tabella dedicata
- * `public.photos` di Supabase, separata completamente da `app_state`.
+ * Gestisce le foto tramite la tabella `app_state` già esistente in Supabase,
+ * usando la chiave dedicata "photos". I metadati sono URL pubblici leggeri
+ * (non base64), quindi il payload JSON è piccolo e non causa timeout.
  *
  * ARCHITETTURA:
  *   File immagini  → Supabase Storage (bucket event-images / category-images)
- *   Metadati foto  → Supabase Database (tabella public.photos)
- *   app_state      → NON contiene più foto
- *   localStorage   → NON contiene più foto
+ *   Metadati foto  → app_state key="photos" (array JSON leggero di riferimenti)
+ *   localStorage   → MAI. Zero.
+ *   base64         → MAI. Zero.
+ *
+ * La tabella `public.photos` separata NON esiste nel progetto attuale.
+ * Questo servizio usa ESCLUSIVAMENTE la tabella `app_state` già presente.
  */
 
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 
-const TABLE = 'photos';
+const APP_STATE_TABLE = 'app_state';
+const PHOTOS_KEY = 'photos';
 
 /**
- * Recupera tutte le foto (approved + pending) dalla tabella dedicata.
- * Restituisce le foto ordinate per data di creazione decrescente.
+ * Recupera l'array di foto da app_state.
+ * @returns {Array} Array di oggetti foto (può essere vuoto)
  */
 export const fetchAllPhotos = async () => {
   if (!isSupabaseConfigured || !supabase) return [];
 
   try {
     const { data, error } = await supabase
-      .from(TABLE)
-      .select('id, url, title, category, author, uploaded_at, status, likes, created_at')
-      .order('created_at', { ascending: false });
+      .from(APP_STATE_TABLE)
+      .select('value')
+      .eq('key', PHOTOS_KEY)
+      .maybeSingle();
 
     if (error) {
-      console.warn('[PhotoService] Error fetching photos:', error.message);
+      console.warn('[PhotoService] Error fetching photos from app_state:', error.message);
       return [];
     }
 
-    // Normalizza il campo uploaded_at (snake_case dal DB → camelCase per il frontend)
-    return (data || []).map(normalizePhoto);
+    const value = data?.value;
+    if (Array.isArray(value)) {
+      return value;
+    }
+    return [];
   } catch (err) {
     console.warn('[PhotoService] Exception fetching photos:', err);
     return [];
@@ -42,133 +51,64 @@ export const fetchAllPhotos = async () => {
 };
 
 /**
- * Inserisce una nuova foto in stato "pending" per moderazione.
- * @param {object} photoData - { url, title, category, author }
- * @returns {object|null} - La foto inserita o null in caso di errore
+ * Salva l'intero array di foto in app_state.
+ * NOTA: I metadati devono essere SOLO riferimenti URL (non base64/blob).
+ * @param {Array} photosArray - Array di oggetti { id, url, title, category, author, uploadedAt, status, likes }
  */
-export const insertPhoto = async (photoData) => {
-  if (!isSupabaseConfigured || !supabase) return null;
-
-  const id = 'ph-' + Date.now();
-  const row = {
-    id,
-    url: photoData.url,
-    title: photoData.title || 'Momento speciale a Pinzolo',
-    category: photoData.category || 'feste',
-    author: photoData.author || 'Ospite',
-    uploaded_at: new Date().toISOString().split('T')[0],
-    status: 'pending',
-    likes: 0
-  };
-
-  try {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .insert(row)
-      .select()
-      .single();
-
-    if (error) {
-      console.warn('[PhotoService] Error inserting photo:', error.message);
-      return { ...row }; // Restituisce comunque i dati ottimistici
-    }
-
-    return normalizePhoto(data);
-  } catch (err) {
-    console.warn('[PhotoService] Exception inserting photo:', err);
-    return { ...normalizePhoto(row) };
-  }
-};
-
-/**
- * Aggiorna lo stato di una foto (es. da 'pending' a 'approved').
- * @param {string} photoId
- * @param {object} updates - Campi da aggiornare (status, likes, title, ecc.)
- */
-export const updatePhoto = async (photoId, updates) => {
+export const saveAllPhotos = async (photosArray) => {
   if (!isSupabaseConfigured || !supabase) return;
 
-  // Converti camelCase → snake_case per i campi DB se necessario
-  const dbUpdates = {};
-  if (updates.status !== undefined) dbUpdates.status = updates.status;
-  if (updates.likes !== undefined) dbUpdates.likes = updates.likes;
-  if (updates.title !== undefined) dbUpdates.title = updates.title;
-  if (updates.category !== undefined) dbUpdates.category = updates.category;
-  if (updates.author !== undefined) dbUpdates.author = updates.author;
+  // Sanity check: garantiamo che nessun elemento contenga base64
+  const safePhotos = photosArray.map(p => ({
+    id: p.id,
+    url: p.url,
+    title: p.title,
+    category: p.category,
+    author: p.author,
+    uploadedAt: p.uploadedAt,
+    status: p.status,
+    likes: p.likes ?? 0
+  }));
 
   try {
     const { error } = await supabase
-      .from(TABLE)
-      .update(dbUpdates)
-      .eq('id', photoId);
+      .from(APP_STATE_TABLE)
+      .upsert(
+        { key: PHOTOS_KEY, value: safePhotos, updated_at: new Date().toISOString() },
+        { onConflict: 'key' }
+      );
 
     if (error) {
-      console.warn('[PhotoService] Error updating photo:', photoId, error.message);
+      console.warn('[PhotoService] Error saving photos to app_state:', error.message);
     }
   } catch (err) {
-    console.warn('[PhotoService] Exception updating photo:', photoId, err);
+    console.warn('[PhotoService] Exception saving photos:', err);
   }
 };
 
 /**
- * Elimina una foto dalla tabella (NON elimina il file dallo Storage).
- * @param {string} photoId
+ * Sottoscrizione Realtime ai cambiamenti sulla chiave "photos" in app_state.
+ * Quando un altro device aggiorna le foto, il callback riceve il nuovo array.
+ * @param {function} onUpdate - Callback(photosArray)
+ * @returns {function} Funzione di cleanup (unsubscribe)
  */
-export const deletePhotoById = async (photoId) => {
-  if (!isSupabaseConfigured || !supabase) return;
-
-  try {
-    const { error } = await supabase
-      .from(TABLE)
-      .delete()
-      .eq('id', photoId);
-
-    if (error) {
-      console.warn('[PhotoService] Error deleting photo:', photoId, error.message);
-    }
-  } catch (err) {
-    console.warn('[PhotoService] Exception deleting photo:', photoId, err);
-  }
-};
-
-/**
- * Sottoscrizione Realtime ai cambiamenti sulla tabella photos.
- * Chiama onInsert, onUpdate o onDelete al verificarsi di eventi.
- * @param {function} onInsert
- * @param {function} onUpdate
- * @param {function} onDelete
- * @returns {function} Funzione di cleanup
- */
-export const subscribeToPhotos = (onInsert, onUpdate, onDelete) => {
+export const subscribeToPhotos = (onUpdate) => {
   if (!isSupabaseConfigured || !supabase) return () => {};
 
   try {
     const channel = supabase
-      .channel('photos_realtime')
+      .channel('photos_app_state_realtime')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: TABLE },
+        {
+          event: '*',
+          schema: 'public',
+          table: APP_STATE_TABLE,
+          filter: `key=eq.${PHOTOS_KEY}`
+        },
         (payload) => {
-          if (payload.new) {
-            onInsert?.(normalizePhoto(payload.new));
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: TABLE },
-        (payload) => {
-          if (payload.new) {
-            onUpdate?.(normalizePhoto(payload.new));
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: TABLE },
-        (payload) => {
-          if (payload.old?.id) {
-            onDelete?.(payload.old.id);
+          if (payload.new?.value && Array.isArray(payload.new.value)) {
+            onUpdate(payload.new.value);
           }
         }
       )
@@ -182,19 +122,3 @@ export const subscribeToPhotos = (onInsert, onUpdate, onDelete) => {
     return () => {};
   }
 };
-
-/**
- * Normalizza un record DB (snake_case) nel formato usato dal frontend (camelCase).
- * @param {object} row
- * @returns {object}
- */
-const normalizePhoto = (row) => ({
-  id: row.id,
-  url: row.url,
-  title: row.title,
-  category: row.category,
-  author: row.author,
-  uploadedAt: row.uploaded_at || row.uploadedAt || new Date().toISOString().split('T')[0],
-  status: row.status,
-  likes: row.likes ?? 0
-});

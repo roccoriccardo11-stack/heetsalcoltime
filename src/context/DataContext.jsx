@@ -7,28 +7,22 @@ import {
 } from '../data/initialData';
 import { useAuth } from './AuthContext';
 import { fetchCloudKey, saveCloudKey, subscribeToCloudChanges } from '../lib/cloudSync';
-import {
-  fetchAllPhotos,
-  insertPhoto,
-  updatePhoto,
-  deletePhotoById,
-  subscribeToPhotos
-} from '../lib/photoService';
+import { fetchAllPhotos, saveAllPhotos, subscribeToPhotos } from '../lib/photoService';
 
 const DataContext = createContext();
 
-// Keys usati in app_state (CloudSync) — le foto NON sono più qui
+// Chiavi per app_state — Photos è gestita da photoService, NON da saveCloudKey direttamente
 const CONTENT_KEY = 'content';
 const EVENTS_KEY = 'events';
 const MESSAGES_KEY = 'messages';
-// PHOTOS_KEY è stato rimosso intenzionalmente da CloudSync/app_state
+// PHOTOS_KEY è gestita internamente da photoService tramite app_state key='photos'
 
 const LOCAL_CONTENT_KEY = 'heets_site_content_v2';
 const LOCAL_EVENTS_KEY = 'heets_events_v2';
 const LOCAL_MESSAGES_KEY = 'heets_messages_v2';
 
-// Chiavi legacy da rimuovere subito (liberano quota su tutti i dispositivi)
-const LEGACY_KEYS_TO_PURGE = [
+// Chiavi localStorage legacy contenenti foto — da eliminare immediatamente su ogni dispositivo
+const LEGACY_PHOTO_KEYS = [
   'heets_photos_v2',
   'sheets_photos_v2',
   'hat_photos'
@@ -41,8 +35,7 @@ const safeGetLocalStorage = (key, fallback) => {
   try {
     const saved = localStorage.getItem(key);
     return saved ? JSON.parse(saved) : fallback;
-  } catch (err) {
-    console.warn(`[DataContext] Could not read ${key} from storage:`, err);
+  } catch {
     return fallback;
   }
 };
@@ -51,16 +44,14 @@ const safeSetLocalStorage = (key, value) => {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (err) {
-    console.warn(`[DataContext] Could not save ${key} to storage (quota or private mode):`, err);
+    console.warn(`[DataContext] Cannot save ${key} to localStorage (quota/private):`, err.message);
   }
 };
 
 const safeRemoveLocalStorage = (key) => {
   try {
     localStorage.removeItem(key);
-  } catch (err) {
-    console.warn(`[DataContext] Could not remove ${key} from storage:`, err);
-  }
+  } catch {}
 };
 
 // ---------------------------------------------------------------------------
@@ -69,7 +60,7 @@ const safeRemoveLocalStorage = (key) => {
 export const DataProvider = ({ children }) => {
   const { user, canManage, recordAuditAction } = useAuth();
 
-  // 1. Site content (Hero, about, categories, contacts)
+  // 1. Site content
   const [siteContent, setSiteContent] = useState(() => {
     const saved = safeGetLocalStorage(LOCAL_CONTENT_KEY, INITIAL_SITE_CONTENT);
     if (saved && typeof saved === 'object') {
@@ -79,38 +70,36 @@ export const DataProvider = ({ children }) => {
     return INITIAL_SITE_CONTENT;
   });
 
-  // 2. Events list
-  const [events, setEvents] = useState(() => {
-    return safeGetLocalStorage(LOCAL_EVENTS_KEY, INITIAL_EVENTS);
-  });
+  // 2. Events
+  const [events, setEvents] = useState(() =>
+    safeGetLocalStorage(LOCAL_EVENTS_KEY, INITIAL_EVENTS)
+  );
 
-  // 3. Photos — gestite ESCLUSIVAMENTE dalla tabella Supabase `photos`
-  //    NON vengono scritte in localStorage NÉ in app_state
+  // 3. Photos — gestite da photoService via app_state, MAI in localStorage
   const [photos, setPhotos] = useState(INITIAL_PHOTOS);
   const [photosLoading, setPhotosLoading] = useState(true);
 
-  // 4. Contact messages
-  const [messages, setMessages] = useState(() => {
-    return safeGetLocalStorage(LOCAL_MESSAGES_KEY, INITIAL_MESSAGES);
-  });
+  // 4. Messages
+  const [messages, setMessages] = useState(() =>
+    safeGetLocalStorage(LOCAL_MESSAGES_KEY, INITIAL_MESSAGES)
+  );
 
   // ---------------------------------------------------------------------------
-  // Effetto 1: Pulizia immediata delle chiavi legacy + caricamento dati cloud
+  // Effetto 1: Pulizia legacy + caricamento content/events/messages da CloudSync
   // ---------------------------------------------------------------------------
   useEffect(() => {
     let isMounted = true;
 
-    // Rimuovi tutte le chiavi foto legacy dal localStorage di tutti i dispositivi
-    LEGACY_KEYS_TO_PURGE.forEach(safeRemoveLocalStorage);
+    // Elimina immediatamente tutte le chiavi foto legacy dal localStorage
+    LEGACY_PHOTO_KEYS.forEach(safeRemoveLocalStorage);
 
-    // Carica dati leggeri da app_state (content, events, messages)
     const loadCloudData = async () => {
       try {
         const [cloudContent, cloudEvents, cloudMessages] = await Promise.all([
           fetchCloudKey(CONTENT_KEY, null),
           fetchCloudKey(EVENTS_KEY, null),
           fetchCloudKey(MESSAGES_KEY, null)
-          // ⚠️ PHOTOS_KEY rimosso: le foto vengono caricate separatamente sotto
+          // Photos NON vengono caricate qui: usano photoService sotto
         ]);
 
         if (!isMounted) return;
@@ -137,16 +126,15 @@ export const DataProvider = ({ children }) => {
           saveCloudKey(MESSAGES_KEY, messages);
         }
       } catch (err) {
-        console.warn('[DataContext] Cloud sync error on load (content/events/messages):', err);
+        console.warn('[DataContext] Cloud sync error (content/events/messages):', err);
       }
     };
 
     loadCloudData();
 
-    // Realtime per content, events, messages (NON photos — ha il proprio canale)
+    // Realtime per content/events/messages (NON photos — ha il proprio canale)
     const unsubscribeCloud = subscribeToCloudChanges((key, value) => {
-      if (!isMounted || value === undefined || value === null) return;
-
+      if (!isMounted || value == null) return;
       if (key === CONTENT_KEY) {
         delete value.sponsors;
         setSiteContent(value);
@@ -158,7 +146,7 @@ export const DataProvider = ({ children }) => {
         setMessages(value);
         safeSetLocalStorage(LOCAL_MESSAGES_KEY, value);
       }
-      // 'photos' non viene più gestito qui
+      // 'photos' non viene gestito qui: usa il canale dedicato sotto
     });
 
     return () => {
@@ -168,51 +156,27 @@ export const DataProvider = ({ children }) => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---------------------------------------------------------------------------
-  // Effetto 2: Caricamento iniziale foto + Realtime dedicato alla tabella photos
+  // Effetto 2: Caricamento foto + Realtime dedicato (via photoService)
   // ---------------------------------------------------------------------------
   useEffect(() => {
     let isMounted = true;
 
-    // Carica tutte le foto dalla tabella dedicata
     const loadPhotos = async () => {
       setPhotosLoading(true);
       const dbPhotos = await fetchAllPhotos();
       if (!isMounted) return;
-
-      if (dbPhotos && dbPhotos.length > 0) {
-        setPhotos(dbPhotos);
-      } else {
-        // Fallback ai dati iniziali se la tabella è vuota (primo avvio)
-        setPhotos(INITIAL_PHOTOS);
-      }
+      // Usa i dati del DB se presenti, altrimenti fallback ai dati iniziali
+      setPhotos(dbPhotos.length > 0 ? dbPhotos : INITIAL_PHOTOS);
       setPhotosLoading(false);
     };
 
     loadPhotos();
 
-    // Realtime Supabase: ascolta INSERT/UPDATE/DELETE sulla tabella photos
-    const unsubscribePhotos = subscribeToPhotos(
-      // onInsert: nuova foto → aggiungila in testa se non presente
-      (newPhoto) => {
-        if (!isMounted) return;
-        setPhotos(prev => {
-          const exists = prev.some(p => p.id === newPhoto.id);
-          return exists ? prev : [newPhoto, ...prev];
-        });
-      },
-      // onUpdate: foto modificata → aggiorna in place
-      (updatedPhoto) => {
-        if (!isMounted) return;
-        setPhotos(prev =>
-          prev.map(p => p.id === updatedPhoto.id ? updatedPhoto : p)
-        );
-      },
-      // onDelete: foto rimossa → filtrala
-      (deletedId) => {
-        if (!isMounted) return;
-        setPhotos(prev => prev.filter(p => p.id !== deletedId));
-      }
-    );
+    // Realtime: quando un altro device salva le foto in app_state, aggiorna qui
+    const unsubscribePhotos = subscribeToPhotos((updatedPhotos) => {
+      if (!isMounted) return;
+      setPhotos(updatedPhotos);
+    });
 
     return () => {
       isMounted = false;
@@ -223,17 +187,9 @@ export const DataProvider = ({ children }) => {
   // ---------------------------------------------------------------------------
   // Sync localStorage per dati leggeri (NO foto)
   // ---------------------------------------------------------------------------
-  useEffect(() => {
-    safeSetLocalStorage(LOCAL_CONTENT_KEY, siteContent);
-  }, [siteContent]);
-
-  useEffect(() => {
-    safeSetLocalStorage(LOCAL_EVENTS_KEY, events);
-  }, [events]);
-
-  useEffect(() => {
-    safeSetLocalStorage(LOCAL_MESSAGES_KEY, messages);
-  }, [messages]);
+  useEffect(() => { safeSetLocalStorage(LOCAL_CONTENT_KEY, siteContent); }, [siteContent]);
+  useEffect(() => { safeSetLocalStorage(LOCAL_EVENTS_KEY, events); }, [events]);
+  useEffect(() => { safeSetLocalStorage(LOCAL_MESSAGES_KEY, messages); }, [messages]);
 
   // ---------------------------------------------------------------------------
   // Security guard
@@ -243,7 +199,7 @@ export const DataProvider = ({ children }) => {
       throw new Error('Accesso negato: operazione riservata esclusivamente a Moderatori e Owner autorizzati.');
     }
     if (user.role === 'moderator' && user.isActive === false) {
-      throw new Error('Account moderatore disattivato dall\'Owner. Permesso revocato.');
+      throw new Error("Account moderatore disattivato dall'Owner. Permesso revocato.");
     }
   }, [user, canManage]);
 
@@ -257,9 +213,7 @@ export const DataProvider = ({ children }) => {
     const newContent = { ...siteContent, ...sanitized };
     setSiteContent(newContent);
     saveCloudKey(CONTENT_KEY, newContent);
-    if (recordAuditAction) {
-      recordAuditAction('MODIFICA_CMS', 'Testi del Sito', 'Aggiornati testi, claim o info generali dal CMS');
-    }
+    recordAuditAction?.('MODIFICA_CMS', 'Testi del Sito', 'Aggiornati testi, claim o info generali dal CMS');
   };
 
   const updateCategoryContent = (categoryId, newFields) => {
@@ -272,9 +226,7 @@ export const DataProvider = ({ children }) => {
     };
     setSiteContent(newContent);
     saveCloudKey(CONTENT_KEY, newContent);
-    if (recordAuditAction) {
-      recordAuditAction('MODIFICA_CATEGORIA', categoryId, `Aggiornata categoria ${categoryId}`);
-    }
+    recordAuditAction?.('MODIFICA_CATEGORIA', categoryId, `Aggiornata categoria ${categoryId}`);
   };
 
   const addCategoryCard = (newCardData) => {
@@ -296,9 +248,7 @@ export const DataProvider = ({ children }) => {
     const newContent = { ...siteContent, categories: [...(siteContent.categories || []), newCard] };
     setSiteContent(newContent);
     saveCloudKey(CONTENT_KEY, newContent);
-    if (recordAuditAction) {
-      recordAuditAction('AGGIUNGI_RIQUADRO', newCard.title, `Aggiunto nuovo riquadro ${newCard.title}`);
-    }
+    recordAuditAction?.('AGGIUNGI_RIQUADRO', newCard.title, `Aggiunto nuovo riquadro ${newCard.title}`);
     return newCard;
   };
 
@@ -311,9 +261,7 @@ export const DataProvider = ({ children }) => {
     };
     setSiteContent(newContent);
     saveCloudKey(CONTENT_KEY, newContent);
-    if (recordAuditAction) {
-      recordAuditAction('ELIMINA_RIQUADRO', target?.title || categoryId, `Eliminato riquadro ${categoryId}`);
-    }
+    recordAuditAction?.('ELIMINA_RIQUADRO', target?.title || categoryId, `Eliminato riquadro ${categoryId}`);
   };
 
   const reorderCategoryCards = (orderedCategories) => {
@@ -321,9 +269,7 @@ export const DataProvider = ({ children }) => {
     const newContent = { ...siteContent, categories: orderedCategories };
     setSiteContent(newContent);
     saveCloudKey(CONTENT_KEY, newContent);
-    if (recordAuditAction) {
-      recordAuditAction('RIORDINA_RIQUADRI', 'Home Riquadri', 'Aggiornato ordine di visualizzazione dei riquadri');
-    }
+    recordAuditAction?.('RIORDINA_RIQUADRI', 'Home Riquadri', 'Aggiornato ordine di visualizzazione dei riquadri');
   };
 
   // ---------------------------------------------------------------------------
@@ -340,20 +286,16 @@ export const DataProvider = ({ children }) => {
     const updated = [newEvent, ...events];
     setEvents(updated);
     saveCloudKey(EVENTS_KEY, updated);
-    if (recordAuditAction) {
-      recordAuditAction('CREA_EVENTO', newEvent.title, `Creato nuovo evento per il ${newEvent.date} a ${newEvent.location}`);
-    }
+    recordAuditAction?.('CREA_EVENTO', newEvent.title, `Creato nuovo evento per il ${newEvent.date} a ${newEvent.location}`);
     return newEvent;
   };
 
   const updateEvent = (eventId, eventData) => {
     assertAuthorized();
-    const updated = events.map(evt => (evt.id === eventId ? { ...evt, ...eventData } : evt));
+    const updated = events.map(evt => evt.id === eventId ? { ...evt, ...eventData } : evt);
     setEvents(updated);
     saveCloudKey(EVENTS_KEY, updated);
-    if (recordAuditAction) {
-      recordAuditAction('MODIFICA_EVENTO', eventData.title || eventId, `Modificati dettagli evento ID ${eventId}`);
-    }
+    recordAuditAction?.('MODIFICA_EVENTO', eventData.title || eventId, `Modificati dettagli evento ID ${eventId}`);
   };
 
   const deleteEvent = (eventId) => {
@@ -362,24 +304,21 @@ export const DataProvider = ({ children }) => {
     const updated = events.filter(evt => evt.id !== eventId);
     setEvents(updated);
     saveCloudKey(EVENTS_KEY, updated);
-    if (recordAuditAction) {
-      recordAuditAction('ELIMINA_EVENTO', target?.title || eventId, `Eliminato evento ID ${eventId}`);
-    }
+    recordAuditAction?.('ELIMINA_EVENTO', target?.title || eventId, `Eliminato evento ID ${eventId}`);
   };
 
   // ---------------------------------------------------------------------------
-  // Photo Actions — usano la tabella Supabase dedicata, MAI app_state/CloudSync
+  // Photo Actions
+  // Ogni operazione:
+  //   1. Aggiorna lo stato React immediatamente (ottimistico → UI reattiva)
+  //   2. Persiste su Supabase via photoService (app_state key='photos')
+  //   3. ZERO localStorage, ZERO base64, ZERO CloudSync diretto per le foto
   // ---------------------------------------------------------------------------
 
-  /**
-   * Carica una nuova foto in stato "pending".
-   * Il frontend aggiorna lo stato ottimisticamente; Supabase Realtime
-   * sincronizzerà automaticamente su tutti i dispositivi connessi.
-   */
   const uploadUserPhoto = async (photoData) => {
-    const optimisticPhoto = {
+    const newPhoto = {
       id: 'ph-' + Date.now(),
-      url: photoData.url,
+      url: photoData.url,           // URL pubblico Supabase Storage (non base64)
       title: photoData.title || 'Momento speciale a Pinzolo',
       category: photoData.category || 'feste',
       author: photoData.author || (user?.name || 'Ospite'),
@@ -388,80 +327,49 @@ export const DataProvider = ({ children }) => {
       likes: 0
     };
 
-    // Aggiornamento ottimistico immediato nell'UI
-    setPhotos(prev => [optimisticPhoto, ...prev]);
+    // Aggiornamento ottimistico immediato
+    const updated = [newPhoto, ...photos];
+    setPhotos(updated);
 
-    // Salva nel database Supabase (tabella photos)
-    const saved = await insertPhoto({
-      ...optimisticPhoto,
-      author: photoData.author || (user?.name || 'Ospite')
-    });
+    // Persistenza su app_state (solo metadati URL, niente base64)
+    await saveAllPhotos(updated);
 
-    // Se l'id effettivo del DB è diverso da quello ottimistico, aggiorna
-    if (saved && saved.id !== optimisticPhoto.id) {
-      setPhotos(prev =>
-        prev.map(p => p.id === optimisticPhoto.id ? saved : p)
-      );
-    }
-
-    return saved || optimisticPhoto;
+    return newPhoto;
   };
 
   const approvePhoto = async (photoId) => {
     assertAuthorized();
     const target = photos.find(p => p.id === photoId);
-
-    // Ottimistico
-    setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, status: 'approved' } : p));
-
-    // Persistenza DB
-    await updatePhoto(photoId, { status: 'approved' });
-
-    if (recordAuditAction) {
-      recordAuditAction('APPROVA_FOTO', target?.title || photoId, `Approvata foto di ${target?.author || 'utente'}`);
-    }
+    const updated = photos.map(p => p.id === photoId ? { ...p, status: 'approved' } : p);
+    setPhotos(updated);
+    await saveAllPhotos(updated);
+    recordAuditAction?.('APPROVA_FOTO', target?.title || photoId, `Approvata foto di ${target?.author || 'utente'}`);
   };
 
   const rejectPhoto = async (photoId) => {
     assertAuthorized();
     const target = photos.find(p => p.id === photoId);
-
-    // Ottimistico
-    setPhotos(prev => prev.filter(p => p.id !== photoId));
-
-    // Persistenza DB
-    await deletePhotoById(photoId);
-
-    if (recordAuditAction) {
-      recordAuditAction('RIFIUTA_FOTO', target?.title || photoId, `Rifiutata foto di ${target?.author || 'utente'}`);
-    }
+    const updated = photos.filter(p => p.id !== photoId);
+    setPhotos(updated);
+    await saveAllPhotos(updated);
+    recordAuditAction?.('RIFIUTA_FOTO', target?.title || photoId, `Rifiutata foto di ${target?.author || 'utente'}`);
   };
 
   const deletePhoto = async (photoId) => {
     assertAuthorized();
     const target = photos.find(p => p.id === photoId);
-
-    // Ottimistico
-    setPhotos(prev => prev.filter(p => p.id !== photoId));
-
-    // Persistenza DB
-    await deletePhotoById(photoId);
-
-    if (recordAuditAction) {
-      recordAuditAction('ELIMINA_FOTO_GALLERY', target?.title || photoId, 'Rimossa foto dalla gallery');
-    }
+    const updated = photos.filter(p => p.id !== photoId);
+    setPhotos(updated);
+    await saveAllPhotos(updated);
+    recordAuditAction?.('ELIMINA_FOTO_GALLERY', target?.title || photoId, 'Rimossa foto dalla gallery');
   };
 
   const likePhoto = async (photoId) => {
-    const target = photos.find(p => p.id === photoId);
-    if (!target) return;
-    const newLikes = (target.likes || 0) + 1;
-
-    // Ottimistico
-    setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, likes: newLikes } : p));
-
-    // Persistenza DB
-    await updatePhoto(photoId, { likes: newLikes });
+    const updated = photos.map(p =>
+      p.id === photoId ? { ...p, likes: (p.likes || 0) + 1 } : p
+    );
+    setPhotos(updated);
+    await saveAllPhotos(updated);
   };
 
   // ---------------------------------------------------------------------------
@@ -482,7 +390,7 @@ export const DataProvider = ({ children }) => {
 
   const markMessageAsRead = (msgId) => {
     assertAuthorized();
-    const updated = messages.map(m => (m.id === msgId ? { ...m, read: true } : m));
+    const updated = messages.map(m => m.id === msgId ? { ...m, read: true } : m);
     setMessages(updated);
     saveCloudKey(MESSAGES_KEY, updated);
   };
@@ -492,15 +400,13 @@ export const DataProvider = ({ children }) => {
     const updated = messages.filter(m => m.id !== msgId);
     setMessages(updated);
     saveCloudKey(MESSAGES_KEY, updated);
-    if (recordAuditAction) {
-      recordAuditAction('ELIMINA_MESSAGGIO', msgId, `Eliminato messaggio ID ${msgId}`);
-    }
+    recordAuditAction?.('ELIMINA_MESSAGGIO', msgId, `Eliminato messaggio ID ${msgId}`);
   };
 
   // ---------------------------------------------------------------------------
-  // Reset (solo content/events/messages — le foto hanno il loro DB)
+  // Reset
   // ---------------------------------------------------------------------------
-  const resetToDefaults = () => {
+  const resetToDefaults = async () => {
     assertAuthorized();
     setSiteContent(INITIAL_SITE_CONTENT);
     setEvents(INITIAL_EVENTS);
@@ -508,10 +414,8 @@ export const DataProvider = ({ children }) => {
     saveCloudKey(CONTENT_KEY, INITIAL_SITE_CONTENT);
     saveCloudKey(EVENTS_KEY, INITIAL_EVENTS);
     saveCloudKey(MESSAGES_KEY, INITIAL_MESSAGES);
-    // Le foto NON vengono resettate: restano nel loro database dedicato
-    if (recordAuditAction) {
-      recordAuditAction('RESET_DEFAULT', 'Contenuti del Sito', 'Ripristinati testi, categorie e messaggi predefiniti');
-    }
+    // Le foto NON vengono resettate automaticamente: troppo rischio di perdita dati
+    recordAuditAction?.('RESET_DEFAULT', 'Contenuti del Sito', 'Ripristinati testi, categorie e messaggi predefiniti');
   };
 
   // ---------------------------------------------------------------------------
