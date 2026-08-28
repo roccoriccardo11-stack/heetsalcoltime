@@ -22,6 +22,7 @@ import { useAuth } from '../context/AuthContext';
 export const ModeratorsManager = ({ onShowToast }) => {
   const {
     user,
+    isOwner,
     moderators,
     invitesList,
     auditLogs,
@@ -136,13 +137,15 @@ export const ModeratorsManager = ({ onShowToast }) => {
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold uppercase mb-2">
             <KeyRound className="w-3.5 h-3.5" />
-            AREA SUPERADMIN (PROPRIETARIO)
+            {isOwner ? 'AREA OWNER (PROPRIETARIO)' : 'GESTIONE INVITI & TEAM MODERATORI'}
           </div>
           <h2 className="font-display font-black text-2xl sm:text-3xl text-white uppercase tracking-tight">
-            EMISSIONE CODICI & GESTIONE MODERATORI
+            EMISSIONE CODICI & TEAM COLLABORATORI
           </h2>
           <p className="text-xs sm:text-sm text-zinc-400 max-w-2xl mt-1">
-            Sei l'unico <strong>SuperAdmin</strong> autorizzato ad emettere codici e link di invito per i tuoi collaboratori. Nessuno può diventare moderatore senza il tuo codice.
+            {isOwner
+              ? "Sei l'Owner del sistema. Puoi emettere codici e link di invito, gestire i moderatori del team e aggiornare le tue impostazioni amministrative."
+              : "Come Moderatore autorizzato puoi generare codici e link di invito monouso per nuovi collaboratori e monitorare il team."}
           </p>
         </div>
       </div>
@@ -185,17 +188,19 @@ export const ModeratorsManager = ({ onShowToast }) => {
           <span>Storico Azioni ({auditLogs.length})</span>
         </button>
 
-        <button
-          onClick={() => setActiveSubTab('settings')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
-            activeSubTab === 'settings'
-              ? 'bg-cyan-400 text-black font-extrabold shadow-glow-cyan'
-              : 'bg-alpine-950 text-zinc-400 hover:text-white border border-cyan-500/20'
-          }`}
-        >
-          <Settings className="w-4 h-4" />
-          <span>Credenziali SuperAdmin</span>
-        </button>
+        {isOwner && (
+          <button
+            onClick={() => setActiveSubTab('settings')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
+              activeSubTab === 'settings'
+                ? 'bg-cyan-400 text-black font-extrabold shadow-glow-cyan'
+                : 'bg-alpine-950 text-zinc-400 hover:text-white border border-cyan-500/20'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span>Credenziali SuperAdmin</span>
+          </button>
+        )}
       </div>
 
       {/* SECTION 1: EMIT INVITE CODES */}
@@ -437,35 +442,41 @@ export const ModeratorsManager = ({ onShowToast }) => {
                   <div className="mt-4 pt-3 border-t border-cyan-500/10 flex items-center justify-between text-[11px] font-mono text-zinc-400">
                     <span>Attivo dal: {new Date(mod.createdAt || Date.now()).toLocaleDateString('it-IT')}</span>
 
-                    <div className="flex items-center gap-2">
-                      {mod.isActive !== false ? (
-                        <button
-                          onClick={() => handleDeactivate(mod.id, mod.name, mod.email)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 text-xs font-bold transition-colors"
-                          title="Disattiva l'accesso"
-                        >
-                          <Power className="w-3.5 h-3.5" />
-                          <span>Disattiva</span>
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleActivate(mod.id, mod.name)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-colors"
-                          title="Riattiva l'accesso"
-                        >
-                          <Power className="w-3.5 h-3.5" />
-                          <span>Riattiva</span>
-                        </button>
-                      )}
+                    {isOwner ? (
+                      <div className="flex items-center gap-2">
+                        {mod.isActive !== false ? (
+                          <button
+                            onClick={() => handleDeactivate(mod.id, mod.name, mod.email)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 text-xs font-bold transition-colors"
+                            title="Disattiva l'accesso"
+                          >
+                            <Power className="w-3.5 h-3.5" />
+                            <span>Disattiva</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleActivate(mod.id, mod.name)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-colors"
+                            title="Riattiva l'accesso"
+                          >
+                            <Power className="w-3.5 h-3.5" />
+                            <span>Riattiva</span>
+                          </button>
+                        )}
 
-                      <button
-                        onClick={() => handleRemove(mod.id, mod.name, mod.email)}
-                        className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/25 text-red-400 border border-red-500/30 transition-colors"
-                        title="Rimuovi definitivamente"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                        <button
+                          onClick={() => handleRemove(mod.id, mod.name, mod.email)}
+                          className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/25 text-red-400 border border-red-500/30 transition-colors"
+                          title="Rimuovi definitivamente"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-zinc-500 font-mono">
+                        {mod.isActive !== false ? '• Account Operativo' : '• Account Sospeso'}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}

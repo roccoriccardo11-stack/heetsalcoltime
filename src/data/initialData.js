@@ -2,6 +2,7 @@
 
 export const INITIAL_SITE_CONTENT = {
   hero: {
+    backgroundImage: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&w=2000&q=85",
     badge: "ALPS · SKI · NIGHTS · PARTY",
     title: "HEETS ALCOL TIME",
     claim: "PINZOLO · MADONNA DI CAMPIGLIO · TUTTO L'ANNO",
@@ -30,7 +31,11 @@ export const INITIAL_SITE_CONTENT = {
       longDesc: "Le nostre leggendarie serate e collette: musica, dj set, divertimento senza filtri e la voglia di accogliere chiunque sia in vacanza per farlo sentire a casa. Da serate improvvisate in baita a party a tema indimenticabili.",
       coverImage: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=1200&q=80",
       accentColor: "from-cyan-400 to-blue-600",
-      badge: "NIGHTLIFE"
+      badge: "NIGHTLIFE",
+      link: "",
+      buttonText: "Scopri",
+      order: 1,
+      isActive: true
     },
     {
       id: "apres-ski",
@@ -40,7 +45,11 @@ export const INITIAL_SITE_CONTENT = {
       longDesc: "Gli scarponi ancora ai piedi, il tramonto sulle Dolomiti di Brenta, le canzoni cantate a squarciagola e i brindisi caldi. L'après-ski a Campiglio e Pinzolo come non l'avete mai vissuto, dai rifugi fino a valle.",
       coverImage: "https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=1200&q=80",
       accentColor: "from-sky-400 to-cyan-600",
-      badge: "WINTER VIBES"
+      badge: "WINTER VIBES",
+      link: "",
+      buttonText: "Scopri",
+      order: 2,
+      isActive: true
     },
     {
       id: "capodanno",
@@ -50,7 +59,11 @@ export const INITIAL_SITE_CONTENT = {
       longDesc: "Il Capodanno sulle nevi di Pinzolo e Madonna di Campiglio: brindisi di mezzanotte sotto le stelle, fuochi d'artificio riflessi sulla neve e musica che non si ferma fino al sorgere del sole del nuovo anno.",
       coverImage: "https://images.unsplash.com/photo-1467810563316-b5476525c0f9?auto=format&fit=crop&w=1200&q=80",
       accentColor: "from-blue-400 to-indigo-600",
-      badge: "SPECIAL NIGHT"
+      badge: "SPECIAL NIGHT",
+      link: "",
+      buttonText: "Scopri",
+      order: 3,
+      isActive: true
     },
     {
       id: "ferragosto",
@@ -60,7 +73,11 @@ export const INITIAL_SITE_CONTENT = {
       longDesc: "L'apice dell'estate tra grigliate epiche in quota, fiumi di birra fresca, sole splendente e nottate intorno al falò con chitarre, casse e cielo limpido sopra le nostre valli.",
       coverImage: "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&w=1200&q=80",
       accentColor: "from-teal-400 to-cyan-600",
-      badge: "SUMMER PEAK"
+      badge: "SUMMER PEAK",
+      link: "",
+      buttonText: "Scopri",
+      order: 4,
+      isActive: true
     },
     {
       id: "montagna",
@@ -70,7 +87,11 @@ export const INITIAL_SITE_CONTENT = {
       longDesc: "La nostra passione radicata: sentieri, vette delle Dolomiti di Brenta, rifugi nascosti, laghi alpini e albe mozzafiato. Perché prima di fare festa, amiamo e rispettiamo la nostra terra meravigliosa.",
       coverImage: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&q=80",
       accentColor: "from-cyan-500 to-teal-700",
-      badge: "NATURE & HIKING"
+      badge: "NATURE & HIKING",
+      link: "",
+      buttonText: "Scopri",
+      order: 5,
+      isActive: true
     }
   ],
   contacts: {

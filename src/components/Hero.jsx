@@ -5,14 +5,39 @@ import { IcebergLogoIcon } from './Logo';
 
 export const Hero = ({ onOpenUpload }) => {
   const { siteContent } = useData();
-  const { hero } = siteContent;
+  const hero = siteContent?.hero || {};
+
+  const heroBgImage = hero.backgroundImage || "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&w=2000&q=85";
+
+  // Parse title to keep neon gradient on last words if default, or render custom title
+  const renderTitle = () => {
+    const rawTitle = (hero.title || "HEETS ALCOL TIME").trim();
+    if (rawTitle.toUpperCase() === "HEETS ALCOL TIME") {
+      return (
+        <>
+          HEETS <span className="bg-gradient-to-r from-cyan-400 via-sky-200 to-blue-400 bg-clip-text text-transparent drop-shadow-none">ALCOL TIME</span>
+        </>
+      );
+    }
+    const words = rawTitle.split(' ');
+    if (words.length > 1) {
+      const firstPart = words.slice(0, Math.ceil(words.length / 2)).join(' ');
+      const secondPart = words.slice(Math.ceil(words.length / 2)).join(' ');
+      return (
+        <>
+          {firstPart} <span className="bg-gradient-to-r from-cyan-400 via-sky-200 to-blue-400 bg-clip-text text-transparent drop-shadow-none">{secondPart}</span>
+        </>
+      );
+    }
+    return rawTitle;
+  };
 
   return (
     <section id="home" className="relative min-h-[95vh] flex items-center justify-center pt-24 pb-16 overflow-hidden">
       {/* Background Image with Deep Midnight & Neon Cyan Overlays */}
       <div className="absolute inset-0 z-0">
         <img
-          src="https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&w=2000&q=85"
+          src={heroBgImage}
           alt="Alps Night Life & Mountain Vibes"
           className="w-full h-full object-cover object-center scale-105 filter brightness-[0.32] contrast-125 transition-transform duration-1000"
         />
@@ -55,7 +80,7 @@ export const Hero = ({ onOpenUpload }) => {
 
         {/* Main Title */}
         <h1 className="font-display font-black text-4xl sm:text-6xl md:text-7xl lg:text-8xl tracking-tight text-white uppercase drop-shadow-2xl mb-4">
-          HEETS <span className="bg-gradient-to-r from-cyan-400 via-sky-200 to-blue-400 bg-clip-text text-transparent drop-shadow-none">ALCOL TIME</span>
+          {renderTitle()}
         </h1>
 
         {/* Spaced Alpine Claim */}

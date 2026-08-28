@@ -208,6 +208,68 @@ export const DataProvider = ({ children }) => {
     }
   };
 
+  const addCategoryCard = (newCardData) => {
+    assertAuthorized();
+    const newCard = {
+      id: newCardData.id || 'card-' + Date.now(),
+      title: newCardData.title || 'Nuovo Riquadro',
+      slug: (newCardData.title || 'nuovo-riquadro').toLowerCase().replace(/\s+/g, '-'),
+      shortDesc: newCardData.shortDesc || 'Descrizione breve del riquadro.',
+      longDesc: newCardData.longDesc || '',
+      coverImage: newCardData.coverImage || 'https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&w=1200&q=80',
+      accentColor: newCardData.accentColor || 'from-cyan-400 to-blue-600',
+      badge: newCardData.badge || 'NUOVO',
+      link: newCardData.link || '',
+      buttonText: newCardData.buttonText || 'Scopri',
+      order: (siteContent.categories?.length || 0) + 1,
+      isActive: true
+    };
+
+    const newContent = {
+      ...siteContent,
+      categories: [...(siteContent.categories || []), newCard]
+    };
+
+    setSiteContent(newContent);
+    saveCloudKey(CONTENT_KEY, newContent);
+
+    if (recordAuditAction) {
+      recordAuditAction('AGGIUNGI_RIQUADRO', newCard.title, `Aggiunto nuovo riquadro ${newCard.title}`);
+    }
+    return newCard;
+  };
+
+  const deleteCategoryCard = (categoryId) => {
+    assertAuthorized();
+    const target = siteContent.categories.find(c => c.id === categoryId);
+    const newContent = {
+      ...siteContent,
+      categories: siteContent.categories.filter(c => c.id !== categoryId)
+    };
+
+    setSiteContent(newContent);
+    saveCloudKey(CONTENT_KEY, newContent);
+
+    if (recordAuditAction) {
+      recordAuditAction('ELIMINA_RIQUADRO', target?.title || categoryId, `Eliminato riquadro ${categoryId}`);
+    }
+  };
+
+  const reorderCategoryCards = (orderedCategories) => {
+    assertAuthorized();
+    const newContent = {
+      ...siteContent,
+      categories: orderedCategories
+    };
+
+    setSiteContent(newContent);
+    saveCloudKey(CONTENT_KEY, newContent);
+
+    if (recordAuditAction) {
+      recordAuditAction('RIORDINA_RIQUADRI', 'Home Riquadri', 'Aggiornato ordine di visualizzazione dei riquadri');
+    }
+  };
+
   // Event Actions
   const addEvent = (eventData) => {
     assertAuthorized();
@@ -377,6 +439,9 @@ export const DataProvider = ({ children }) => {
         messages,
         updateSiteContent,
         updateCategoryContent,
+        addCategoryCard,
+        deleteCategoryCard,
+        reorderCategoryCards,
         addEvent,
         updateEvent,
         deleteEvent,

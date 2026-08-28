@@ -43,14 +43,13 @@ export const AdminDashboard = ({ onBackToSite, onShowToast }) => {
       badge: unreadMessagesCount > 0 ? unreadMessagesCount : null,
       badgeColor: 'bg-cyan-400 text-black'
     },
-    // Tab visible ONLY to the OWNER
-    ...(isOwner ? [{
+    {
       id: 'moderators',
       label: 'Team Moderatori & Inviti',
       icon: Users,
-      badge: 'OWNER',
-      badgeColor: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-    }] : [])
+      badge: isOwner ? '👑 OWNER' : 'INVITI',
+      badgeColor: isOwner ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+    }
   ];
 
   return (
@@ -111,7 +110,7 @@ export const AdminDashboard = ({ onBackToSite, onShowToast }) => {
         </div>
 
         {/* Dashboard Section Tabs */}
-        <div className={`grid grid-cols-2 ${isOwner ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-2 sm:gap-3 mt-6`}>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3 mt-6">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -148,7 +147,7 @@ export const AdminDashboard = ({ onBackToSite, onShowToast }) => {
           {activeTab === 'events' && <EventsManager onShowToast={onShowToast} />}
           {activeTab === 'content' && <ContentEditor onShowToast={onShowToast} />}
           {activeTab === 'messages' && <MessagesViewer onShowToast={onShowToast} />}
-          {activeTab === 'moderators' && isOwner && <ModeratorsManager onShowToast={onShowToast} />}
+          {activeTab === 'moderators' && <ModeratorsManager onShowToast={onShowToast} />}
         </div>
       </div>
 

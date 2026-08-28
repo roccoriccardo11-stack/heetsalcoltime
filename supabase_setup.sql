@@ -269,7 +269,7 @@ begin
 end;
 $$;
 
--- 5. CREAZIONE INVITO MODERATORE (Riservato esclusivamente all'Owner)
+-- 5. CREAZIONE INVITO MODERATORE (Riservato a Owner e Moderatori attivi)
 create or replace function public.create_moderator_invite(
   p_email text,
   p_note text default ''
@@ -282,6 +282,8 @@ as $$
 declare
   v_caller_id uuid;
   v_caller_role text;
+  v_caller_email text;
+  v_caller_name text;
   v_token text;
   v_new_invite record;
   v_chars text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -292,9 +294,12 @@ begin
     raise exception 'Non autenticato.';
   end if;
 
-  select role into v_caller_role from public.profiles where id = v_caller_id and is_active = true;
-  if v_caller_role <> 'owner' then
-    raise exception 'Accesso negato: solo l''Owner può emettere codici invito.';
+  select role, email, name into v_caller_role, v_caller_email, v_caller_name
+  from public.profiles
+  where id = v_caller_id and is_active = true;
+
+  if v_caller_role not in ('owner', 'moderator') then
+    raise exception 'Accesso negato: operazione riservata ad Owner e Moderatori autorizzati.';
   end if;
 
   -- Genera codice tipo MOD-XXXXXX
@@ -317,12 +322,12 @@ begin
   insert into public.audit_logs (actor_id, actor_email, actor_name, actor_role, action, target, details)
   values (
     v_caller_id,
-    (select email from public.profiles where id = v_caller_id),
-    (select name from public.profiles where id = v_caller_id),
-    'owner',
+    v_caller_email,
+    v_caller_name,
+    v_caller_role,
     'EMISSIONE_INVITO_MODERATORE',
     v_new_invite.email,
-    format('Owner ha emesso il codice %s con scadenza 72h', v_token)
+    format('%s (%s) ha emesso il codice %s con scadenza 72h', v_caller_name, v_caller_role, v_token)
   );
 
   return jsonb_build_object(
@@ -333,7 +338,7 @@ begin
 end;
 $$;
 
--- 6. REVOCA INVITO MODERATORE (Riservato all'Owner)
+-- 6. REVOCA INVITO MODERATORE (Riservato a Owner e Moderatori attivi)
 create or replace function public.revoke_moderator_invite(
   p_invite_id uuid
 )
@@ -348,8 +353,8 @@ declare
 begin
   v_caller_id := auth.uid();
   select role into v_caller_role from public.profiles where id = v_caller_id and is_active = true;
-  if v_caller_role <> 'owner' then
-    raise exception 'Accesso negato: solo l''Owner può revocare codici invito.';
+  if v_caller_role not in ('owner', 'moderator') then
+    raise exception 'Accesso negato: operazione riservata ad Owner e Moderatori autorizzati.';
   end if;
 
   update public.moderator_invites
@@ -530,13 +535,14 @@ create policy "Admins can view all profiles"
   to authenticated
   using (public.is_admin_or_moderator());
 
--- MODERATOR_INVITES (Solo Owner può leggere e gestire inviti)
+-- MODERATOR_INVITES (Owner e Moderatori attivi possono leggere e gestire inviti)
 drop policy if exists "Only Owner can access moderator_invites" on public.moderator_invites;
-create policy "Only Owner can access moderator_invites"
+drop policy if exists "Admins can access moderator_invites" on public.moderator_invites;
+create policy "Admins can access moderator_invites"
   on public.moderator_invites for all
   to authenticated
-  using (public.is_owner())
-  with check (public.is_owner());
+  using (public.is_admin_or_moderator())
+  with check (public.is_admin_or_moderator());
 
 -- AUDIT_LOGS (Lettura per Owner/Moderator, scrittura per utenti autenticati)
 drop policy if exists "Audit logs read for Owner and Moderator" on public.audit_logs;

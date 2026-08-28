@@ -159,8 +159,8 @@ export const AuthProvider = ({ children }) => {
         })));
       }
 
-      // Load invites (Owner only)
-      if (currentRole === 'owner') {
+      // Load invites (Owner and Moderator)
+      if (currentRole === 'owner' || currentRole === 'moderator') {
         const { data: invs } = await supabase
           .from('moderator_invites')
           .select('*')
@@ -282,8 +282,8 @@ export const AuthProvider = ({ children }) => {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'moderator_invites' }, async () => {
         const currentRole = userRoleRef.current;
-        if (currentRole === 'owner') {
-          loadOwnerData('owner');
+        if (currentRole === 'owner' || currentRole === 'moderator') {
+          loadOwnerData(currentRole);
         }
       })
       .subscribe();
@@ -621,10 +621,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   // ==========================================
-  // 5. OWNER: EMIT & MANAGE INVITES VIA SECURE RPC
+  // 5. OWNER & MODERATOR: EMIT & MANAGE INVITES VIA SECURE RPC
   // ==========================================
   const createModeratorInvite = async (emailToInvite = '', note = '') => {
-    if (user?.role !== 'owner') return { success: false, error: 'Riservato all\'Owner.' };
+    if (user?.role !== 'owner' && user?.role !== 'moderator') return { success: false, error: 'Riservato ad Owner e Moderatori.' };
     if (!supabase) return { success: false, error: 'Supabase non pronto.' };
 
     const cleanEmail = (emailToInvite || '').trim().toLowerCase();
@@ -650,7 +650,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const revokeModeratorInvite = async (inviteId) => {
-    if (user?.role !== 'owner') return { success: false, error: 'Riservato all\'Owner.' };
+    if (user?.role !== 'owner' && user?.role !== 'moderator') return { success: false, error: 'Riservato ad Owner e Moderatori.' };
     try {
       const { error } = await supabase.rpc('revoke_moderator_invite', {
         p_invite_id: inviteId
