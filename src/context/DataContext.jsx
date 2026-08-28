@@ -17,60 +17,69 @@ const MESSAGES_KEY = 'messages';
 
 const LOCAL_CONTENT_KEY = 'heets_site_content_v2';
 const LOCAL_EVENTS_KEY = 'heets_events_v2';
-const LOCAL_PHOTOS_KEY = 'heets_photos_v2';
 const LOCAL_MESSAGES_KEY = 'heets_messages_v2';
+const LEGACY_LOCAL_PHOTOS_KEY = 'sheets_photos_v2';
+
+// Safe localStorage helpers to prevent any QuotaExceededError or SecurityError from crashing the app
+const safeGetLocalStorage = (key, fallback) => {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : fallback;
+  } catch (err) {
+    console.warn(`[DataContext] Could not read ${key} from storage:`, err);
+    return fallback;
+  }
+};
+
+const safeSetLocalStorage = (key, value) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    console.warn(`[DataContext] Could not save ${key} to storage (quota or private mode):`, err);
+  }
+};
+
+const safeRemoveLocalStorage = (key) => {
+  try {
+    localStorage.removeItem(key);
+  } catch (err) {
+    console.warn(`[DataContext] Could not remove ${key} from storage:`, err);
+  }
+};
 
 export const DataProvider = ({ children }) => {
   const { user, canManage, recordAuditAction } = useAuth();
 
   // 1. Site content (Hero, about, categories, contacts)
   const [siteContent, setSiteContent] = useState(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_CONTENT_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        delete parsed.sponsors;
-        return parsed;
-      }
-      return INITIAL_SITE_CONTENT;
-    } catch {
-      return INITIAL_SITE_CONTENT;
+    const saved = safeGetLocalStorage(LOCAL_CONTENT_KEY, INITIAL_SITE_CONTENT);
+    if (saved && typeof saved === 'object') {
+      delete saved.sponsors;
+      return saved;
     }
+    return INITIAL_SITE_CONTENT;
   });
 
   // 2. Events list
   const [events, setEvents] = useState(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_EVENTS_KEY);
-      return saved ? JSON.parse(saved) : INITIAL_EVENTS;
-    } catch {
-      return INITIAL_EVENTS;
-    }
+    return safeGetLocalStorage(LOCAL_EVENTS_KEY, INITIAL_EVENTS);
   });
 
-  // 3. Photos (approved & pending)
-  const [photos, setPhotos] = useState(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_PHOTOS_KEY);
-      return saved ? JSON.parse(saved) : INITIAL_PHOTOS;
-    } catch {
-      return INITIAL_PHOTOS;
-    }
-  });
+  // 3. Photos (approved & pending) - MUST NOT be stored in localStorage (served directly from Supabase)
+  const [photos, setPhotos] = useState(INITIAL_PHOTOS);
 
   // 4. Contact messages
   const [messages, setMessages] = useState(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_MESSAGES_KEY);
-      return saved ? JSON.parse(saved) : INITIAL_MESSAGES;
-    } catch {
-      return INITIAL_MESSAGES;
-    }
+    return safeGetLocalStorage(LOCAL_MESSAGES_KEY, INITIAL_MESSAGES);
   });
 
-  // 1. Initial Cloud Sync on Mount
+  // 1. Initial Cloud Sync on Mount & Safe legacy cleanup
   useEffect(() => {
     let isMounted = true;
+
+    // Safely remove legacy photos cache from localStorage if present to free quota immediately
+    safeRemoveLocalStorage(LEGACY_LOCAL_PHOTOS_KEY);
+    safeRemoveLocalStorage('hat_photos');
 
     const loadCloudData = async () => {
       try {
@@ -86,7 +95,7 @@ export const DataProvider = ({ children }) => {
         if (cloudContent) {
           delete cloudContent.sponsors;
           setSiteContent(cloudContent);
-          localStorage.setItem(LOCAL_CONTENT_KEY, JSON.stringify(cloudContent));
+          safeSetLocalStorage(LOCAL_CONTENT_KEY, cloudContent);
         } else {
           // Seed cloud if empty
           saveCloudKey(CONTENT_KEY, siteContent);
@@ -94,21 +103,21 @@ export const DataProvider = ({ children }) => {
 
         if (cloudEvents && Array.isArray(cloudEvents)) {
           setEvents(cloudEvents);
-          localStorage.setItem(LOCAL_EVENTS_KEY, JSON.stringify(cloudEvents));
+          safeSetLocalStorage(LOCAL_EVENTS_KEY, cloudEvents);
         } else {
           saveCloudKey(EVENTS_KEY, events);
         }
 
         if (cloudPhotos && Array.isArray(cloudPhotos)) {
+          // Photos loaded into React state directly from Supabase, NO localStorage writing
           setPhotos(cloudPhotos);
-          localStorage.setItem(LOCAL_PHOTOS_KEY, JSON.stringify(cloudPhotos));
         } else {
           saveCloudKey(PHOTOS_KEY, photos);
         }
 
         if (cloudMessages && Array.isArray(cloudMessages)) {
           setMessages(cloudMessages);
-          localStorage.setItem(LOCAL_MESSAGES_KEY, JSON.stringify(cloudMessages));
+          safeSetLocalStorage(LOCAL_MESSAGES_KEY, cloudMessages);
         } else {
           saveCloudKey(MESSAGES_KEY, messages);
         }
@@ -126,16 +135,16 @@ export const DataProvider = ({ children }) => {
       if (key === CONTENT_KEY) {
         delete value.sponsors;
         setSiteContent(value);
-        localStorage.setItem(LOCAL_CONTENT_KEY, JSON.stringify(value));
+        safeSetLocalStorage(LOCAL_CONTENT_KEY, value);
       } else if (key === EVENTS_KEY && Array.isArray(value)) {
         setEvents(value);
-        localStorage.setItem(LOCAL_EVENTS_KEY, JSON.stringify(value));
+        safeSetLocalStorage(LOCAL_EVENTS_KEY, value);
       } else if (key === PHOTOS_KEY && Array.isArray(value)) {
+        // Live updates update React state directly, NO localStorage write
         setPhotos(value);
-        localStorage.setItem(LOCAL_PHOTOS_KEY, JSON.stringify(value));
       } else if (key === MESSAGES_KEY && Array.isArray(value)) {
         setMessages(value);
-        localStorage.setItem(LOCAL_MESSAGES_KEY, JSON.stringify(value));
+        safeSetLocalStorage(LOCAL_MESSAGES_KEY, value);
       }
     });
 
@@ -145,21 +154,17 @@ export const DataProvider = ({ children }) => {
     };
   }, []);
 
-  // Sync state to LocalStorage
+  // Sync state to LocalStorage for light text data only
   useEffect(() => {
-    localStorage.setItem(LOCAL_CONTENT_KEY, JSON.stringify(siteContent));
+    safeSetLocalStorage(LOCAL_CONTENT_KEY, siteContent);
   }, [siteContent]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_EVENTS_KEY, JSON.stringify(events));
+    safeSetLocalStorage(LOCAL_EVENTS_KEY, events);
   }, [events]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_PHOTOS_KEY, JSON.stringify(photos));
-  }, [photos]);
-
-  useEffect(() => {
-    localStorage.setItem(LOCAL_MESSAGES_KEY, JSON.stringify(messages));
+    safeSetLocalStorage(LOCAL_MESSAGES_KEY, messages);
   }, [messages]);
 
   // Security guard for administrative functions

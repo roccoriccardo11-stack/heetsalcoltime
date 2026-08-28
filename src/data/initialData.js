@@ -15,6 +15,32 @@ export const INITIAL_SITE_CONTENT = {
     tag: "CHI SIAMO",
     title: "NON SOLO AMICI, UNA SECONDA FAMIGLIA",
     text: "Siamo Heets Alcol Time: un gruppo di ragazzi che passa il tempo insieme in montagna, tra camminate di giorno e serate la notte. Non siamo solo amici, siamo una seconda famiglia. Se vieni a Pinzolo o a Madonna di Campiglio e vuoi divertirti sul serio, sei nel posto giusto: qui trovi le nostre feste, i nostri eventi e i momenti più belli vissuti negli anni.",
+    image: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=900&q=80",
+    imageCaption: "La Montagna che Unisce",
+    imageSubcaption: "Dalle cime innevate ai ritrovi estivi",
+    features: [
+      {
+        id: "feat-1",
+        number: "01",
+        title: "In Quota",
+        description: "Escursioni & Baite",
+        icon: "Mountain"
+      },
+      {
+        id: "feat-2",
+        number: "02",
+        title: "Après-Ski",
+        description: "Dj set & Drink",
+        icon: "GlassWater"
+      },
+      {
+        id: "feat-3",
+        number: "03",
+        title: "Community",
+        description: "Accoglienza pura",
+        icon: "Users"
+      }
+    ],
     stats: [
       { label: "Anni di Feste", value: "6+" },
       { label: "Eventi Organizzati", value: "80+" },

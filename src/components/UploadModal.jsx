@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { X, UploadCloud, ShieldAlert, Sparkles, Check } from 'lucide-react';
+import { X, UploadCloud, ShieldAlert, Sparkles, Check, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
+import { supabase } from '../lib/supabaseClient';
+import { optimizeImage } from '../lib/imageOptimizer';
 import { IcebergLogoIcon } from './Logo';
 
 export const UploadModal = ({ isOpen, onClose, initialCategory, onShowToast }) => {
@@ -14,7 +16,11 @@ export const UploadModal = ({ isOpen, onClose, initialCategory, onShowToast }) =
   const [authorName, setAuthorName] = useState(user?.name || '');
   const [imageUrl, setImageUrl] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatusText, setUploadStatusText] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -23,16 +29,13 @@ export const UploadModal = ({ isOpen, onClose, initialCategory, onShowToast }) =
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 10 * 1024 * 1024) {
-        if (onShowToast) onShowToast('Il file supera i 10MB', 'error');
+      if (file.size > 15 * 1024 * 1024) {
+        if (onShowToast) onShowToast('Il file supera i 15MB', 'error');
         return;
       }
-      const reader = new FileReader();
-      reader.onload = () => {
-        setPreviewUrl(reader.result);
-        setImageUrl(reader.result);
-      };
-      reader.readAsDataURL(file);
+      setSelectedFile(file);
+      const objUrl = URL.createObjectURL(file);
+      setPreviewUrl(objUrl);
     }
   };
 
@@ -51,24 +54,103 @@ export const UploadModal = ({ isOpen, onClose, initialCategory, onShowToast }) =
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setPreviewUrl(reader.result);
-        setImageUrl(reader.result);
-      };
-      reader.readAsDataURL(file);
+      if (file.size > 15 * 1024 * 1024) {
+        if (onShowToast) onShowToast('Il file supera i 15MB', 'error');
+        return;
+      }
+      setSelectedFile(file);
+      const objUrl = URL.createObjectURL(file);
+      setPreviewUrl(objUrl);
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!previewUrl && !imageUrl) {
+    if (!selectedFile && !previewUrl && !imageUrl) {
       if (onShowToast) onShowToast('Seleziona o incolla un\'immagine prima di caricare', 'error');
       return;
     }
 
+    let finalPhotoUrl = imageUrl.trim();
+
+    if (selectedFile) {
+      setIsUploading(true);
+      setUploadProgress(20);
+      setUploadStatusText('Ottimizzazione immagine in corso...');
+
+      try {
+        let fileToUpload = selectedFile;
+        try {
+          const optResult = await optimizeImage(selectedFile);
+          if (optResult.isOptimized && optResult.file) {
+            fileToUpload = optResult.file;
+          }
+        } catch (optErr) {
+          console.warn('[UploadModal] Ottimizzazione saltata, uso originale:', optErr);
+        }
+
+        setUploadProgress(50);
+        setUploadStatusText('Caricamento su Supabase Storage...');
+
+        if (supabase) {
+          const ext = fileToUpload.name.split('.').pop()?.toLowerCase() || 'jpg';
+          const cleanBase = (selectedFile.name || 'photo').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 16);
+          const uniqueName = `comm_${Date.now()}_${cleanBase}.${ext}`;
+
+          let targetBucket = 'event-images';
+          let uploadRes = await supabase.storage
+            .from(targetBucket)
+            .upload(uniqueName, fileToUpload, {
+              cacheControl: '31536000',
+              upsert: false
+            });
+
+          // Fallback if event-images bucket doesn't exist
+          if (uploadRes.error && (uploadRes.error.message?.includes('bucket not found') || uploadRes.error.message?.includes('Bucket not found'))) {
+            targetBucket = 'category-images';
+            uploadRes = await supabase.storage
+              .from(targetBucket)
+              .upload(uniqueName, fileToUpload, {
+                cacheControl: '31536000',
+                upsert: false
+              });
+          }
+
+          if (uploadRes.error) {
+            throw new Error(`Errore Supabase Storage: ${uploadRes.error.message}`);
+          }
+
+          setUploadProgress(85);
+          const { data: urlData } = supabase.storage
+            .from(targetBucket)
+            .getPublicUrl(uploadRes.data.path);
+
+          if (!urlData?.publicUrl) {
+            throw new Error('Impossibile ottenere URL pubblico da Supabase Storage.');
+          }
+
+          finalPhotoUrl = urlData.publicUrl;
+        } else {
+          // If Supabase not configured, use local preview
+          finalPhotoUrl = previewUrl || imageUrl;
+        }
+      } catch (err) {
+        console.error('[UploadModal] Errore caricamento:', err);
+        setIsUploading(false);
+        if (onShowToast) onShowToast(`Errore caricamento: ${err.message || err}`, 'error');
+        return;
+      } finally {
+        setIsUploading(false);
+      }
+    }
+
+    if (!finalPhotoUrl) {
+      if (onShowToast) onShowToast('Nessun URL immagine valido.', 'error');
+      return;
+    }
+
     uploadUserPhoto({
-      url: previewUrl || imageUrl,
+      url: finalPhotoUrl,
       title: title || 'Momento indimenticabile a Pinzolo',
       category: category,
       author: authorName || (user?.name || 'Ospite Heets')
@@ -92,7 +174,9 @@ export const UploadModal = ({ isOpen, onClose, initialCategory, onShowToast }) =
     setTitle('');
     setImageUrl('');
     setPreviewUrl('');
+    setSelectedFile(null);
     setSubmitted(false);
+    setIsUploading(false);
     onClose();
   };
 
@@ -279,13 +363,42 @@ export const UploadModal = ({ isOpen, onClose, initialCategory, onShowToast }) =
                 </div>
               </div>
 
+              {/* Upload Progress feedback */}
+              {isUploading && (
+                <div className="space-y-1.5 p-3.5 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 animate-fadeIn">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="flex items-center gap-2 text-cyan-300">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {uploadStatusText || 'Elaborazione in corso...'}
+                    </span>
+                    <span className="text-zinc-400 font-bold">{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-alpine-950 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               {/* Submit CTA */}
               <button
                 type="submit"
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all"
+                disabled={isUploading}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-black font-extrabold text-xs uppercase tracking-wider shadow-glow-cyan transition-all"
               >
-                <Sparkles className="w-4 h-4" />
-                <span>Invia Foto per Approvazione</span>
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Caricamento su Supabase in corso...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>Invia Foto per Approvazione</span>
+                  </>
+                )}
               </button>
             </form>
           )}
