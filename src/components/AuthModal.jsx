@@ -27,7 +27,7 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
   } = useAuth();
 
   // Active view: 'setup' | 'login' | 'register' | 'invite' | 'forgot'
-  const [activeTab, setActiveTab] = useState(() => (!hasOwner ? 'setup' : 'login'));
+  const [activeTab, setActiveTab] = useState(() => (initialInviteToken ? 'invite' : hasOwner === false ? 'setup' : 'login'));
 
   // Form states
   const [email, setEmail] = useState('');
@@ -50,14 +50,6 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
 
   // Synchronize active tab if owner state changes or invite token is passed
   useEffect(() => {
-    if (!hasOwner) {
-      setActiveTab('setup');
-    } else if (activeTab === 'setup') {
-      setActiveTab('login');
-    }
-  }, [hasOwner]);
-
-  useEffect(() => {
     if (initialInviteToken) {
       setInviteToken(initialInviteToken);
       setActiveTab('invite');
@@ -68,11 +60,15 @@ export const AuthModal = ({ isOpen, onClose, onShowToast, initialInviteToken = n
             setModEmail(res.invite.email);
           }
         } else {
-          setError(res.error);
+          setError(res.error || 'Codice invito non valido.');
         }
       });
+    } else if (hasOwner === false) {
+      setActiveTab('setup');
+    } else if (activeTab === 'setup') {
+      setActiveTab('login');
     }
-  }, [initialInviteToken, verifyInviteToken]);
+  }, [hasOwner, initialInviteToken, verifyInviteToken]);
 
   if (!isOpen) return null;
 

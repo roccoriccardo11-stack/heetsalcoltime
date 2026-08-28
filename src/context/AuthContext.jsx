@@ -7,7 +7,8 @@ export const AuthProvider = ({ children }) => {
   // 1. Current Authenticated Profile
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [hasOwner, setHasOwner] = useState(false);
+  // Default to true (safe default) to NEVER flash "Setup Primo Owner" unexpectedly
+  const [hasOwner, setHasOwner] = useState(true);
   const [moderators, setModerators] = useState([]);
   const [invitesList, setInvitesList] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
@@ -18,22 +19,51 @@ export const AuthProvider = ({ children }) => {
     userRoleRef.current = user?.role;
   }, [user?.role]);
 
-  // Check if an Owner exists in the system (Strict boolean from secure RPC)
+  // Check if an Owner exists in the system globally (Multi-layer server-side verification)
   const checkOwnerStatus = useCallback(async () => {
-    if (!supabase) return false;
+    if (!supabase) return true;
+
     try {
+      // 1. Primary Check: Secure database RPC has_owner()
       const { data: rpcHasOwner, error: rpcErr } = await supabase.rpc('has_owner');
       if (!rpcErr && typeof rpcHasOwner === 'boolean') {
         setHasOwner(rpcHasOwner);
         return rpcHasOwner;
       }
       if (rpcErr) {
-        console.warn('[Auth] has_owner RPC returned error:', rpcErr.message);
+        console.warn('[Auth] has_owner RPC check warning:', rpcErr.message);
+      }
+
+      // 2. Secondary Check: Read public 'system_status' from app_state table (RLS allows select for anyone)
+      const { data: stateData, error: stateErr } = await supabase
+        .from('app_state')
+        .select('value')
+        .eq('key', 'system_status')
+        .maybeSingle();
+
+      if (!stateErr && stateData?.value && typeof stateData.value.has_owner === 'boolean') {
+        setHasOwner(stateData.value.has_owner);
+        return stateData.value.has_owner;
+      }
+
+      // 3. Tertiary Check: Direct query on profiles table for role='owner'
+      const { data: ownerProfiles, error: profErr } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'owner')
+        .limit(1);
+
+      if (!profErr && Array.isArray(ownerProfiles)) {
+        const exists = ownerProfiles.length > 0;
+        setHasOwner(exists);
+        return exists;
       }
     } catch (e) {
-      console.warn('[Auth] Error checking owner status:', e);
+      console.warn('[Auth] Error checking global owner status:', e);
     }
-    return false;
+
+    // Safe fallback: default to true to protect system
+    return true;
   }, []);
 
   // Fetch full user profile from 'profiles' table using auth.users.id (UUID)
@@ -69,38 +99,20 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // Safe Self-Healing: If user is authenticated in Supabase Auth but profile row is missing, sync it
+  // Safe Self-Healing: If user is authenticated in Supabase Auth but profile row is missing, sync standard user profile
   const ensureUserProfile = useCallback(async (authUser) => {
     if (!supabase || !authUser?.id) return null;
 
-    // 1. Try to fetch existing
+    // 1. Try to fetch existing profile
     let profile = await fetchUserProfile(authUser.id, authUser.email);
     if (profile) return profile;
 
-    console.log('[Auth] Profile not found in database for authenticated UUID:', authUser.id, '— Attempting safe synchronization...');
+    console.log('[Auth] Profile not found for authenticated UUID:', authUser.id, '— Creating default user profile...');
 
-    // 2. Check if the system has an owner
-    const isOwnerExists = await checkOwnerStatus();
     const cleanEmail = (authUser.email || '').trim().toLowerCase();
     const cleanName = authUser.user_metadata?.name || cleanEmail.split('@')[0] || 'Utente';
 
-    if (!isOwnerExists) {
-      // First authenticated user in empty database -> initialize as owner
-      try {
-        const { error: rpcErr } = await supabase.rpc('setup_initial_owner', {
-          p_name: cleanName
-        });
-        if (!rpcErr) {
-          setHasOwner(true);
-          profile = await fetchUserProfile(authUser.id, cleanEmail);
-          if (profile) return profile;
-        }
-      } catch (err) {
-        console.warn('[Auth] setup_initial_owner exception during ensure:', err);
-      }
-    }
-
-    // 3. Fallback insert standard profile
+    // 2. Standard user profile insert (NEVER automatically promote to owner)
     try {
       const { data: inserted, error: insertErr } = await supabase
         .from('profiles')
@@ -120,7 +132,7 @@ export const AuthProvider = ({ children }) => {
           id: inserted.id,
           email: inserted.email,
           name: inserted.name,
-          role: inserted.role,
+          role: inserted.role || 'user',
           avatar: inserted.avatar || '⛷️',
           isActive: inserted.is_active !== false,
           createdAt: inserted.created_at
@@ -132,7 +144,7 @@ export const AuthProvider = ({ children }) => {
 
     // Final attempt fetch
     return await fetchUserProfile(authUser.id, cleanEmail);
-  }, [checkOwnerStatus, fetchUserProfile]);
+  }, [fetchUserProfile]);
 
   // Load team data if authenticated as Owner or Moderator
   const loadOwnerData = useCallback(async (currentRole) => {
@@ -221,7 +233,9 @@ export const AuthProvider = ({ children }) => {
             return null;
           }
           setUser(profile);
-          loadOwnerData(profile.role);
+          if (profile.role === 'owner' || profile.role === 'moderator') {
+            loadOwnerData(profile.role);
+          }
           return profile;
         }
       } catch (err) {
@@ -232,7 +246,10 @@ export const AuthProvider = ({ children }) => {
 
     const initAuth = async () => {
       try {
-        // 1. Get current stored session from Supabase client
+        // 1. Verify global owner status first
+        await checkOwnerStatus();
+
+        // 2. Get current stored session from Supabase client
         const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
         if (sessionErr) {
           console.warn('[Auth] getSession error:', sessionErr.message);
@@ -241,9 +258,6 @@ export const AuthProvider = ({ children }) => {
         if (session?.user && isMounted) {
           await restoreSession(session.user);
         }
-
-        // 2. Check owner status
-        await checkOwnerStatus();
       } catch (err) {
         console.warn('[Auth] Init exception:', err);
       } finally {
@@ -270,7 +284,7 @@ export const AuthProvider = ({ children }) => {
       await checkOwnerStatus();
     });
 
-    // Real-time table updates for profiles and moderator invites
+    // Real-time table updates for profiles, moderator invites and app_state system_status
     const channel = supabase
       .channel('schema_auth_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, async () => {
@@ -284,6 +298,11 @@ export const AuthProvider = ({ children }) => {
         const currentRole = userRoleRef.current;
         if (currentRole === 'owner' || currentRole === 'moderator') {
           loadOwnerData(currentRole);
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state', filter: 'key=eq.system_status' }, async (payload) => {
+        if (payload.new?.value && typeof payload.new.value.has_owner === 'boolean') {
+          setHasOwner(payload.new.value.has_owner);
         }
       })
       .subscribe();
@@ -315,7 +334,7 @@ export const AuthProvider = ({ children }) => {
     if (alreadyHasOwner) {
       return {
         success: false,
-        error: 'BLOCCATO: Un account OWNER è già stato registrato nel database. La procedura è disabilitata.'
+        error: 'BLOCCATO: Un account OWNER è già stato registrato nel database. La procedura di configurazione iniziale è disabilitata per sempre.'
       };
     }
 
@@ -352,7 +371,6 @@ export const AuthProvider = ({ children }) => {
           return { success: false, error: authError.message };
         }
       } else {
-        // If Supabase returned empty identities (user already registered in email-confirmation mode)
         if (authData?.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0) {
           const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
             email: cleanEmail,
@@ -372,7 +390,7 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
-      // 3. Verify session explicitly
+      // Verify session explicitly
       if (!currentSession) {
         const { data: sessionData } = await supabase.auth.getSession();
         currentSession = sessionData?.session || null;
@@ -381,7 +399,6 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
-      // 4. If no session is available (e.g. Supabase requires email verification)
       if (!currentSession || !currentUser) {
         return {
           success: false,
@@ -390,7 +407,7 @@ export const AuthProvider = ({ children }) => {
         };
       }
 
-      // 5. Promote to 'owner' via secure atomic database RPC (uses auth.uid() from verified session)
+      // 3. Promote to 'owner' via secure atomic database RPC (uses auth.uid() from verified session)
       const { error: rpcError } = await supabase.rpc('setup_initial_owner', {
         p_name: cleanName
       });
@@ -399,7 +416,18 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: rpcError.message };
       }
 
-      // 6. Fetch and update session profile state
+      // 4. Update system_status in app_state for instant public visibility
+      try {
+        await supabase.from('app_state').upsert({
+          key: 'system_status',
+          value: { has_owner: true, owner_configured_at: new Date().toISOString() },
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'key' });
+      } catch (stErr) {
+        console.warn('[Auth] System status sync warning:', stErr);
+      }
+
+      // 5. Fetch and update session profile state
       const dbProfile = await fetchUserProfile(currentUser.id, currentUser.email || cleanEmail);
       const ownerProfile = dbProfile || {
         id: currentUser.id,
@@ -454,26 +482,13 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: 'Nessun utente trovato.' };
       }
 
-      // Se non esiste ancora un Owner nel database (es. primo utente registrato),
-      // promuovilo automaticamente a Owner tramite setup_initial_owner
-      const isOwnerRegistered = await checkOwnerStatus();
-      if (!isOwnerRegistered) {
-        const ownerName = authData.user.user_metadata?.name || cleanEmail.split('@')[0] || 'Owner';
-        const { error: rpcErr } = await supabase.rpc('setup_initial_owner', {
-          p_name: ownerName
-        });
-        if (!rpcErr) {
-          setHasOwner(true);
-        }
-      }
-
       // Recupero / Sincronizzazione sicura del profilo tramite auth.users.id
       const profile = await ensureUserProfile(authData.user);
 
       if (!profile) {
         return {
           success: false,
-          error: 'Impossibile recuperare o sincronizzare il profilo utente nel database. Riprova tra pochi istanti.'
+          error: 'Impossibile recuperare o sincronizzare il profilo utente nel database. Riprova.'
         };
       }
 
@@ -483,7 +498,9 @@ export const AuthProvider = ({ children }) => {
       }
 
       setUser(profile);
-      loadOwnerData(profile.role);
+      if (profile.role === 'owner' || profile.role === 'moderator') {
+        loadOwnerData(profile.role);
+      }
 
       recordAuditAction('LOGIN', 'Pannello Gestione', `Accesso effettuato con ruolo ${profile.role.toUpperCase()}`);
 
@@ -520,17 +537,23 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: authError.message };
       }
 
-      const sessionUser = {
+      if (!authData?.user) {
+        return { success: false, error: 'Registrazione non riuscita. Riprova.' };
+      }
+
+      // Ensure profile row in profiles table with strict role='user'
+      const profile = await ensureUserProfile(authData.user);
+
+      setUser(profile || {
         id: authData.user.id,
         email: cleanEmail,
         name: cleanName,
         role: 'user',
         avatar: '⛷️',
         isActive: true
-      };
+      });
 
-      setUser(sessionUser);
-      return { success: true, user: sessionUser };
+      return { success: true, user: profile };
     } catch (err) {
       return { success: false, error: err.message || 'Errore durante la registrazione.' };
     }
@@ -544,7 +567,6 @@ export const AuthProvider = ({ children }) => {
 
     const cleanToken = rawToken.trim().toUpperCase();
     try {
-      // Use RPC to bypass RLS — the function runs as SECURITY DEFINER
       const { data, error } = await supabase.rpc('verify_invite_token', {
         p_token: cleanToken
       });
@@ -594,7 +616,7 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
-      // Elevate strictly to moderator via DB RPC (uses auth.uid() automatically)
+      // Elevate strictly to moderator via DB RPC
       const { error: rpcErr } = await supabase.rpc('register_moderator_with_invite', {
         p_name: cleanName,
         p_token: cleanToken
@@ -736,7 +758,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   // ==========================================
-  // 7. PASSWORD RESET (Supabase Auth Official Email Reset)
+  // 7. PASSWORD RESET
   // ==========================================
   const requestPasswordReset = async (email) => {
     if (!supabase) return { success: false, error: 'Supabase non pronto.' };
@@ -803,8 +825,8 @@ export const AuthProvider = ({ children }) => {
         removeModerator,
         updateSuperAdminProfile,
         requestPasswordReset,
-        recordAuditAction,
-        logout
+        logout,
+        recordAuditAction
       }}
     >
       {children}
@@ -813,4 +835,3 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
-
