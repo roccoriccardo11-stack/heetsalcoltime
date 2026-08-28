@@ -44,8 +44,7 @@ export const INITIAL_SITE_CONTENT = {
     stats: [
       { label: "Anni di Feste", value: "6+" },
       { label: "Eventi Organizzati", value: "80+" },
-      { label: "Momenti in Quota", value: "1000+" },
-      { label: "Community & Amici", value: "5000+" }
+      { label: "Momenti in Quota", value: "1000+" }
     ]
   },
   categories: [

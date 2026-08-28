@@ -11,7 +11,8 @@ import {
   Image as ImageIcon,
   Layers,
   Sparkles,
-  Link2
+  Link2,
+  Heart
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 import { CategoryImageUploader } from '../components/CategoryImageUploader';
@@ -46,6 +47,35 @@ export const ContentEditor = ({ onShowToast }) => {
         [field]: value
       }
     }));
+  };
+
+  const handleAboutStatChange = (index, field, value) => {
+    setFormData(prev => {
+      const existingStats = prev.about?.stats && Array.isArray(prev.about.stats)
+        ? [...prev.about.stats]
+        : [
+            { value: '6+', label: 'Anni di Feste' },
+            { value: '80+', label: 'Eventi Organizzati' },
+            { value: '1000+', label: 'Momenti in Quota' }
+          ];
+
+      while (existingStats.length <= index) {
+        existingStats.push({ value: '', label: '' });
+      }
+
+      existingStats[index] = {
+        ...existingStats[index],
+        [field]: value
+      };
+
+      return {
+        ...prev,
+        about: {
+          ...prev.about,
+          stats: existingStats.slice(0, 3)
+        }
+      };
+    });
   };
 
   const handleCategoryChange = (index, field, value) => {
@@ -144,10 +174,10 @@ export const ContentEditor = ({ onShowToast }) => {
   };
 
   const handleSave = (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     updateSiteContent(formData);
     if (onShowToast) {
-      onShowToast('Tutti i testi, la Hero e i riquadri sono stati salvati e pubblicati!', 'success');
+      onShowToast('Modifiche salvate correttamente.', 'success');
     }
   };
 
@@ -330,30 +360,173 @@ export const ContentEditor = ({ onShowToast }) => {
 
         {/* TAB 2: CHI SIAMO */}
         {activeTab === 'about' && (
-          <div className="glass-panel p-6 rounded-3xl border border-cyan-500/20 space-y-4 animate-fadeIn">
-            <h4 className="font-mono text-xs font-bold text-cyan-400 uppercase tracking-widest">
-              Presentazione Gruppo ("Chi Siamo")
-            </h4>
+          <div className="space-y-6 animate-fadeIn">
+            
+            {/* Left side card: Testi Principali */}
+            <div className="glass-panel p-6 rounded-3xl border border-cyan-500/20 space-y-4">
+              <div>
+                <h4 className="font-mono text-xs font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2">
+                  <Heart className="w-4 h-4 text-cyan-400" />
+                  1. Parte Sinistra — Testi Principali ("Chi Siamo")
+                </h4>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Modifica il titolo e il testo descrittivo principale visualizzato a sinistra.
+                </p>
+              </div>
 
-            <div>
-              <label className="block text-[11px] font-mono text-zinc-400 mb-1">Titolo Sezione</label>
-              <input
-                type="text"
-                value={formData.about?.title || ''}
-                onChange={(e) => handleAboutChange('title', e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
-              />
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Titolo Sezione</label>
+                <input
+                  type="text"
+                  value={formData.about?.title || ''}
+                  onChange={(e) => handleAboutChange('title', e.target.value)}
+                  placeholder="NON SOLO AMICI, UNA SECONDA FAMIGLIA"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">Testo Principale di Presentazione *</label>
+                <textarea
+                  rows={5}
+                  value={formData.about?.text || ''}
+                  onChange={(e) => handleAboutChange('text', e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none resize-none leading-relaxed"
+                ></textarea>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-[11px] font-mono text-zinc-400 mb-1">Testo Principale di Presentazione *</label>
-              <textarea
-                rows={5}
-                value={formData.about?.text || ''}
-                onChange={(e) => handleAboutChange('text', e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-alpine-950 border border-cyan-500/20 focus:border-cyan-400 text-white text-sm focus:outline-none resize-none leading-relaxed"
-              ></textarea>
+            {/* Right side card: Contenuto laterale (Immagine e 3 Riquadri) */}
+            <div className="glass-panel p-6 rounded-3xl border border-cyan-500/20 space-y-6">
+              <div>
+                <h4 className="font-mono text-xs font-bold text-cyan-400 uppercase tracking-widest flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-cyan-400" />
+                  2. Parte Destra — Contenuto Laterale (Immagine e 3 Riquadri)
+                </h4>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Sostituisci l'immagine e personalizza singolarmente i 3 riquadri numerici con valori e descrizioni.
+                </p>
+              </div>
+
+              {/* Immagine Sezione Chi Siamo */}
+              <div className="p-5 rounded-2xl bg-alpine-950/70 border border-cyan-500/25 space-y-2">
+                <CategoryImageUploader
+                  currentImageUrl={formData.about?.image || "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=900&q=80"}
+                  onImageChange={(newUrl) => handleAboutChange('image', newUrl)}
+                  onError={(err) => {
+                    if (onShowToast) onShowToast(err, 'error');
+                  }}
+                  label="Immagine Chi Siamo (Destra)"
+                />
+              </div>
+
+              {/* I 3 Riquadri Numerici */}
+              <div className="space-y-3">
+                <label className="block text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider">
+                  I 3 Riquadri (Valori e Testi)
+                </label>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Riquadro 1 */}
+                  <div className="p-4 rounded-2xl bg-alpine-950/80 border border-cyan-500/20 space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-cyan-500/15">
+                      <span className="text-xs font-mono font-bold text-cyan-400 uppercase">Riquadro 1</span>
+                      <span className="text-[10px] font-mono text-zinc-400">Box #1</span>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-zinc-400 mb-1">Valore</label>
+                      <input
+                        type="text"
+                        value={formData.about?.stats?.[0]?.value ?? '6+'}
+                        onChange={(e) => handleAboutStatChange(0, 'value', e.target.value)}
+                        placeholder="es. 6+ o 12+"
+                        className="w-full px-3 py-2 rounded-xl bg-alpine-900 border border-cyan-500/20 focus:border-cyan-400 text-white font-bold text-sm focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-zinc-400 mb-1">Titolo / Testo</label>
+                      <input
+                        type="text"
+                        value={formData.about?.stats?.[0]?.label ?? 'Anni di Feste'}
+                        onChange={(e) => handleAboutStatChange(0, 'label', e.target.value)}
+                        placeholder="es. Anni di Feste o Eventi organizzati"
+                        className="w-full px-3 py-2 rounded-xl bg-alpine-900 border border-cyan-500/20 focus:border-cyan-400 text-white text-xs focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Riquadro 2 */}
+                  <div className="p-4 rounded-2xl bg-alpine-950/80 border border-cyan-500/20 space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-cyan-500/15">
+                      <span className="text-xs font-mono font-bold text-cyan-400 uppercase">Riquadro 2</span>
+                      <span className="text-[10px] font-mono text-zinc-400">Box #2</span>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-zinc-400 mb-1">Valore</label>
+                      <input
+                        type="text"
+                        value={formData.about?.stats?.[1]?.value ?? '80+'}
+                        onChange={(e) => handleAboutStatChange(1, 'value', e.target.value)}
+                        placeholder="es. 80+"
+                        className="w-full px-3 py-2 rounded-xl bg-alpine-900 border border-cyan-500/20 focus:border-cyan-400 text-white font-bold text-sm focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-zinc-400 mb-1">Titolo / Testo</label>
+                      <input
+                        type="text"
+                        value={formData.about?.stats?.[1]?.label ?? 'Eventi Organizzati'}
+                        onChange={(e) => handleAboutStatChange(1, 'label', e.target.value)}
+                        placeholder="es. Eventi Organizzati"
+                        className="w-full px-3 py-2 rounded-xl bg-alpine-900 border border-cyan-500/20 focus:border-cyan-400 text-white text-xs focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Riquadro 3 */}
+                  <div className="p-4 rounded-2xl bg-alpine-950/80 border border-cyan-500/20 space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-cyan-500/15">
+                      <span className="text-xs font-mono font-bold text-cyan-400 uppercase">Riquadro 3</span>
+                      <span className="text-[10px] font-mono text-zinc-400">Box #3</span>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-zinc-400 mb-1">Valore</label>
+                      <input
+                        type="text"
+                        value={formData.about?.stats?.[2]?.value ?? '1000+'}
+                        onChange={(e) => handleAboutStatChange(2, 'value', e.target.value)}
+                        placeholder="es. 1000+"
+                        className="w-full px-3 py-2 rounded-xl bg-alpine-900 border border-cyan-500/20 focus:border-cyan-400 text-white font-bold text-sm focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-zinc-400 mb-1">Titolo / Testo</label>
+                      <input
+                        type="text"
+                        value={formData.about?.stats?.[2]?.label ?? 'Momenti in Quota'}
+                        onChange={(e) => handleAboutStatChange(2, 'label', e.target.value)}
+                        placeholder="es. Momenti in Quota o Community & Amici"
+                        className="w-full px-3 py-2 rounded-xl bg-alpine-900 border border-cyan-500/20 focus:border-cyan-400 text-white text-xs focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pulsante Salva dedicato per comodità */}
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-400 via-sky-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500 text-black text-xs font-extrabold uppercase tracking-wider shadow-glow-cyan transition-all"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Salva Modifiche Chi Siamo</span>
+                </button>
+              </div>
+
             </div>
+
           </div>
         )}
 

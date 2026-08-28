@@ -42,8 +42,7 @@ export const AboutSection = () => {
   const defaultStats = [
     { label: "Anni di Feste", value: "6+", icon: Sparkles },
     { label: "Eventi Organizzati", value: "80+", icon: GlassWater },
-    { label: "Momenti in Quota", value: "1000+", icon: Mountain },
-    { label: "Community & Amici", value: "5000+", icon: Users }
+    { label: "Momenti in Quota", value: "1000+", icon: Mountain }
   ];
 
   const defaultFeatures = [
@@ -70,7 +69,7 @@ export const AboutSection = () => {
     }
   ];
 
-  const stats = about.stats || defaultStats;
+  const stats = about.stats && about.stats.length > 0 ? about.stats : defaultStats;
   const features = about.features && about.features.length > 0 ? about.features : defaultFeatures;
   const aboutImage = about.image || "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=900&q=80";
 
@@ -176,14 +175,14 @@ export const AboutSection = () => {
               </div>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 gap-3">
-              {stats.map((st, idx) => (
-                <div key={idx} className="glass-card p-4 rounded-2xl border border-cyan-500/15 text-center hover:border-cyan-400/40 transition-all">
-                  <div className="font-display font-black text-2xl sm:text-3xl text-cyan-400 tracking-tight">
+            {/* Stats Grid - 3 Riquadri con Valore e Titolo */}
+            <div className={`grid ${stats.length === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-2.5 sm:gap-3`}>
+              {stats.slice(0, 3).map((st, idx) => (
+                <div key={idx} className="glass-card p-3 sm:p-4 rounded-2xl border border-cyan-500/15 text-center hover:border-cyan-400/40 transition-all flex flex-col justify-center">
+                  <div className="font-display font-black text-xl sm:text-2xl md:text-3xl text-cyan-400 tracking-tight">
                     {st.value}
                   </div>
-                  <div className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider mt-1">
+                  <div className="text-[10px] sm:text-[11px] font-mono text-zinc-400 uppercase tracking-wider mt-1 leading-snug">
                     {st.label}
                   </div>
                 </div>
